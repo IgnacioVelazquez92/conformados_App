@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle hoja{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="h4 mb-1">Hoja {{ hoja.nro_entrega }}</h1>
+            <p class="mb-1"><strong>OID:</strong> {{ hoja.oid }}</p>
+            <p class="mb-0"><span class="badge brand-chip">{{ hoja.estado }}</span></p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/panel/">Volver al panel</a>
+    </div>
+</section>
+
+<section class="brand-card bg-white p-4 mb-4">
+    <h2 class="h6">Compartir links por canal</h2>
+    <p class="text-secondary mb-3">Rol actual: {{ profile.get_rol_display }}</p>
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <label class="form-label">Link logistica</label>
+            {% if can_share_logistica %}
+                <input class="form-control" value="{{ logistica_url }}" readonly />
+            {% else %}
+                <div class="alert alert-warning mb-0">Tu rol no tiene permiso para compartir este link.</div>
+            {% endif %}
+        </div>
+        <div class="col-12 col-lg-6">
+            <label class="form-label">Link cliente</label>
+            {% if can_share_cliente %}
+                <input class="form-control" value="{{ cliente_url }}" readonly />
+            {% else %}
+                <div class="alert alert-warning mb-0">Tu rol no tiene permiso para compartir este link.</div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="brand-card bg-white p-4 mb-4">
+    <h2 class="h6">Filtrar remitos</h2>
+    <form class="row g-2" method="get">
+        <div class="col-12 col-md-5">
+            <input type="text" class="form-control" name="q" placeholder="Buscar por numero" value="{{ q }}" />
+        </div>
+        <div class="col-12 col-md-4">
+            <select class="form-select" name="remito_estado">
+                <option value="">Todos</option>
+                {% for value, label in remito_estados %}
+                    <option value="{{ value }}" {% if remito_estado == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-3 d-grid">
+            <button class="btn btn-dark" type="submit">Aplicar</button>
+        </div>
+    </form>
+</section>
+
+<section class="brand-card bg-white p-0 overflow-hidden mb-4">
+    <div class="p-3 border-bottom"><strong>Remitos</strong></div>
+    <div class="table-responsive">
+        <table class="table table-sm mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Numero</th>
+                    <th>Cliente</th>
+                    <th>Direccion</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for remito in remitos %}
+                    <tr>
+                        <td>{{ remito.numero }}</td>
+                        <td>{{ remito.cliente }}</td>
+                        <td>{{ remito.direccion }}</td>
+                        <td>{{ remito.estado }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="text-center text-secondary py-3">Sin remitos para este filtro.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-6">
+        <section class="brand-card bg-white p-3 h-100">
+            <h2 class="h6">Ultimas evidencias</h2>
+            <ul class="list-group list-group-flush">
+                {% for evidencia in evidencias %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Remito {{ evidencia.remito.numero }}</span>
+                        <span class="text-secondary">{{ evidencia.estado_validacion }}</span>
+                    </li>
+                {% empty %}
+                    <li class="list-group-item text-secondary">Sin evidencias.</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+    <div class="col-12 col-lg-6">
+        <section class="brand-card bg-white p-3 h-100">
+            <h2 class="h6">Ultimos no entregados</h2>
+            <ul class="list-group list-group-flush">
+                {% for intento in intentos %}
+                    <li class="list-group-item">
+                        Remito {{ intento.remito.numero }} - {{ intento.motivo }}
+                    </li>
+                {% empty %}
+                    <li class="list-group-item text-secondary">Sin intentos.</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+</div>
+{% endblock %}

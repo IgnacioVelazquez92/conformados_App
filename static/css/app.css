@@ -1,0 +1,84 @@
+:root {
+    --brand-bg: #f4f1e8;
+    --brand-ink: #1f2a37;
+    --brand-accent: #1d6f5f;
+    --brand-soft: #dbeae6;
+}
+
+body {
+    background: radial-gradient(circle at top left, #fffaf0 0%, var(--brand-bg) 45%, #edf3f7 100%);
+    color: var(--brand-ink);
+}
+
+.brand-shell {
+    max-width: 1100px;
+}
+
+.brand-card {
+    border: 0;
+    border-radius: 1rem;
+    box-shadow: 0 10px 30px rgba(31, 42, 55, 0.08);
+}
+
+.brand-chip {
+    background: var(--brand-soft);
+    color: var(--brand-accent);
+}
+
+.brand-link {
+    color: var(--brand-accent);
+    text-decoration: none;
+}
+
+.brand-link:hover {
+    text-decoration: underline;
+}
+
+.table-scroll-mobile {
+    max-height: 360px;
+}
+
+.page-block {
+    margin-bottom: 1rem;
+}
+
+.page-heading {
+    margin-bottom: 0.25rem;
+}
+
+.page-subheading {
+    color: #6c757d;
+    margin-bottom: 0;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.cell-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+@media (max-width: 767.98px) {
+    main.container {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .brand-card {
+        border-radius: 0.85rem;
+    }
+
+    .table-scroll-mobile {
+        max-height: 52vh;
+    }
+
+    .form-actions > .btn,
+    .cell-actions > .btn {
+        width: 100%;
+    }
+}

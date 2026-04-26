@@ -1,0 +1,48 @@
+# --- Django ---
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Entornos Virtuales ---
+.venv/
+venv/
+ENV/
+env/
+bin/
+lib/
+include/
+
+# --- Variables de Entorno (CRÍTICO) ---
+.env
+.flaskenv
+
+# --- Agentes y Documentación ---
+# Ignora archivos temporales si tus agentes generan reportes o logs, 
+# pero mantenemos agents.md porque es parte de tu lógica.
+*.agent.log
+/temp_agent_data/
+
+# --- Visual Studio Code ---
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# --- Sistema y Otros ---
+.DS_Store
+Thumbs.db
+*.bak
+*.swp
+
+# --- Node/Bootstrap (si usás npm para manejar assets) ---
+node_modules/
+npm-debug.log*

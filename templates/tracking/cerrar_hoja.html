@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Cerrar hoja{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4">
+    <h1 class="h4 page-heading">Cerrar hoja de ruta</h1>
+    <p class="mb-1">Hoja {{ hoja.nro_entrega }} ({{ hoja.oid }})</p>
+    <p class="page-subheading">Estado actual: {{ hoja.estado }}</p>
+
+    {% if form.errors %}
+        <div class="alert alert-danger">{{ form.errors }}</div>
+    {% endif %}
+
+    <form method="post" class="row g-3">
+        {% csrf_token %}
+        <div class="col-12">{{ form.as_p }}</div>
+        <div class="col-12 form-actions">
+            <button class="btn btn-danger" type="submit">Cerrar hoja</button>
+            <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

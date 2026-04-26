@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Excel/CSV{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4">
+    <h1 class="h4 mb-3">Importar Hoja de Ruta Excel / CSV</h1>
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+        {% csrf_token %}
+        <div class="col-12">{{ form.as_p }}</div>
+        <p class="text-muted mb-0">Primero usa previsualizar para validar los datos. Luego volve a seleccionar el archivo y confirma importacion.</p>
+        <div class="col-12 form-actions">
+            <button class="btn btn-outline-primary" type="submit" name="action" value="preview">Previsualizar</button>
+            <button class="btn btn-success" type="submit" name="action" value="import">Importar</button>
+            <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
+        </div>
+    </form>
+</section>
+
+{% if preview %}
+<section class="brand-card bg-white p-4 mt-3">
+    <h2 class="h5 mb-3">Previsualizacion detectada</h2>
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-6 col-lg-4"><strong>OID:</strong> {{ preview.oid }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Nro entrega:</strong> {{ preview.nro_entrega }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Fecha:</strong> {{ preview.fecha|date:"d/m/Y" }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Chofer:</strong> {{ preview.chofer|default:"-" }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Flete:</strong> {{ preview.flete|default:"-" }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Acompanante:</strong> {{ preview.acompanante|default:"-" }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Transporte:</strong> {{ preview.transporte|default:"-" }}</div>
+        <div class="col-12 col-md-6 col-lg-4"><strong>Tipo transporte:</strong> {{ preview.transporte_tipo|default:"-" }}</div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Remito</th>
+                    <th>Cliente</th>
+                    <th>Subcliente</th>
+                    <th>Direccion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for remito in preview.remitos %}
+                <tr>
+                    <td>{{ remito.numero }}</td>
+                    <td>{{ remito.cliente }}</td>
+                    <td>{{ remito.subcliente|default:"-" }}</td>
+                    <td>{{ remito.direccion }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

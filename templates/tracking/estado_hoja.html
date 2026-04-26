@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Estado de hoja{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4">
+    <h1 class="h4">Portal {{ canal }}</h1>
+    {% if estado == "inexistente" %}
+        <p class="mb-0">La hoja {{ oid }} aun no fue importada.</p>
+    {% elif estado == "cerrada" %}
+        <p class="mb-0">La hoja {{ oid }} esta cerrada y no acepta nuevas cargas.</p>
+    {% endif %}
+</section>
+{% endblock %}

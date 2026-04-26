@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Panel interno{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h1 class="h3 mb-1">Panel interno</h1>
+            <p class="text-secondary mb-0">Gestión de hojas, evidencias y cierre operativo.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% if can_import_pdf %}
+                <a class="btn btn-success" href="/panel/importar/pdf/">Importar PDF</a>
+                <a class="btn btn-outline-success" href="/panel/importar/excel/">Importar Excel/CSV</a>
+            {% endif %}
+            {% if can_review_evidence %}
+                <a class="btn btn-outline-secondary" href="/panel/evidencias/">Revisar evidencias</a>
+            {% endif %}
+            {% if can_manage_users %}
+                <a class="btn btn-outline-dark" href="/panel/usuarios/">Usuarios</a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="brand-card bg-white p-4 mb-4">
+    <form class="row g-2" method="get">
+        <div class="col-12 col-md-5">
+            <input type="text" class="form-control" name="q" placeholder="Buscar por nro de entrega" value="{{ q }}" />
+        </div>
+        <div class="col-12 col-md-4">
+            <select class="form-select" name="estado">
+                <option value="">Todos los estados</option>
+                {% for value, label in estados %}
+                    <option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-3 d-grid">
+            <button class="btn btn-dark" type="submit">Filtrar</button>
+        </div>
+    </form>
+</section>
+
+<section class="brand-card bg-white p-0 overflow-hidden">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Entrega</th>
+                    <th>OID</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for hoja in hojas %}
+                <tr>
+                    <td>{{ hoja.nro_entrega }}</td>
+                    <td><small>{{ hoja.oid }}</small></td>
+                    <td><span class="badge brand-chip">{{ hoja.estado }}</span></td>
+                    <td class="cell-actions">
+                        <a class="btn btn-sm btn-outline-dark" href="/panel/hojas/{{ hoja.oid }}/">Detalle</a>
+                        {% if hoja.estado != "cerrada" and can_close_hoja %}
+                            <a class="btn btn-sm btn-outline-danger" href="/panel/hojas/{{ hoja.oid }}/cerrar/">Cerrar</a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center text-secondary py-4">No hay hojas cargadas.</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

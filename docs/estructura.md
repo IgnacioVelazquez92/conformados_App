@@ -1,0 +1,325 @@
+# Estructura tecnica viva
+
+## manage.py
+
+Punto de entrada para comandos administrativos de Django.
+
+- `main()`: carga `DJANGO_SETTINGS_MODULE` (default `config.settings.development`) y ejecuta comandos.
+
+## requirements.txt
+
+Dependencias base del backend Django.
+
+- `Django`: framework web principal.
+- `psycopg[binary]`: conexion PostgreSQL.
+- `django-storages` + `boto3`: integracion con bucket object storage.
+
+## .env.example
+
+Variables de entorno de referencia para configuracion local y despliegue.
+
+- `DJANGO_SETTINGS_MODULE`: selecciona settings de `development` o `production`.
+- `SQLITE_PATH`: ruta opcional de base local SQLite.
+- `DB_*`: conexion PostgreSQL para produccion.
+- `AWS_*`: parametros para storage bucket en produccion.
+
+## config/settings/base.py
+
+Configuracion comun de Django para todos los entornos.
+
+- apps, middleware, templates e internacionalizacion.
+- static/media y defaults globales.
+- `STATICFILES_DIRS`: incluye `static/` del proyecto para servir assets frontend versionados localmente.
+
+## static/vendor/bootstrap/css/bootstrap.min.css
+
+Bootstrap CSS local del proyecto (sin dependencia CDN en runtime).
+
+## static/vendor/bootstrap/js/bootstrap.bundle.min.js
+
+Bootstrap JS local del proyecto (incluye componentes interactivos).
+
+## static/css/app.css
+
+Estilos globales de interfaz del proyecto.
+
+- variables visuales, cards y layout compartido.
+- ajustes mobile-first para contenedores y tablas en pantallas chicas.
+
+## static/js/app.js
+
+Inicializacion frontend global para templates Django.
+
+- aplica clases Bootstrap a campos de formularios renderizados con `as_p`.
+
+## static/vendor/jsqr/jsQR.js
+
+Libreria local para decodificar QR desde frames de camara cuando el navegador no soporta `BarcodeDetector`.
+
+## config/settings/development.py
+
+Configuracion local para desarrollo.
+
+- `DEBUG` activo por defecto.
+- base de datos SQLite.
+- almacenamiento local de archivos.
+
+## config/settings/production.py
+
+Configuracion para despliegue.
+
+- base de datos PostgreSQL.
+- storage bucket S3 compatible.
+- cookies seguras y cabecera proxy https.
+
+## config/settings/railway.py
+
+Configuracion de despliegue especifica para Railway.
+
+- extiende `production.py`.
+- usa hosts por defecto de Railway y `RAILWAY_PUBLIC_DOMAIN` para CSRF.
+
+## config/urls.py
+
+Router principal del proyecto.
+
+- `urlpatterns`: conecta `admin/` y rutas de `tracking`.
+- en modo debug sirve `MEDIA_URL` para ver archivos cargados localmente.
+
+## tracking/forms.py
+
+Formulario de carga del PDF de Hoja de Ruta.
+
+- `ImportPdfForm`: valida que el archivo recibido sea un PDF.
+- `ImportSpreadsheetForm`: valida que el archivo recibido sea Excel o CSV.
+- `EvidenciaForm`: valida imagen/PDF de conformado, comentario y confirmacion de duplicada.
+- `NoEntregadoForm`: valida el motivo y comentario de un intento fallido.
+- `ValidacionEvidenciaForm`: valida estado y comentario para revision administrativa.
+- `CierreHojaForm`: valida comentario opcional para cierre operativo.
+- `LoginForm`: formulario de autenticacion para panel interno.
+- `UserCreateForm`: alta de usuario interno con rol y permisos de compartir links.
+- `UserUpdateForm`: edicion de datos de usuario interno, estado y rol.
+- `UserDeleteForm`: confirmacion de borrado de usuario.
+
+## tracking/services/authz.py
+
+Servicio de autenticacion/autorizacion de usuario interno.
+
+- `get_or_create_profile(...)`: asegura perfil de rol para el usuario autenticado.
+- `create_user_with_profile(...)`: crea usuario y su `UserProfile` asociado.
+- `can_manage_users(...)`: permiso para CRUD de usuarios internos.
+- `can_import_pdf(...)`: permiso para importar hojas desde PDF.
+- `can_review_evidence(...)`: permiso para revisar/validar evidencias.
+- `can_close_hoja(...)`: permiso para cierre operativo de hoja.
+- `can_grant_staff(...)`: permiso para otorgar o quitar flag staff.
+- `update_user_with_profile(...)`: actualiza usuario y perfil de rol.
+- `delete_user_and_profile(...)`: elimina usuario y su perfil.
+
+## tracking/services/import_pdf.py
+
+Servicio de importacion y parseo de PDF de Hoja de Ruta.
+
+- `extract_text_from_pdf(...)`: obtiene texto plano del PDF.
+- `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida.
+- `_extract_labelled_value(...)`: extrae cabeceras por etiqueta (nro, flete, chofer, acompanante, transporte) con fallback de linea siguiente.
+- `_infer_transporte_tipo(...)`: infiere tipo de transporte cuando el PDF no trae valor junto a la etiqueta.
+- `_extract_date_value(...)`: extrae una fecha real evitando falsos positivos como encabezados.
+- `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito.
+- `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (fecha, cliente, remito, direccion).
+- `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos.
+- `_validate_parsed_hoja(...)`: valida OID, fecha, cantidad minima y campos obligatorios de remitos.
+- `import_hoja_ruta_pdf(...)`: crea o actualiza `HojaRuta`, `Remito` y eventos de trazabilidad.
+
+## tracking/services/import_tabular.py
+
+Servicio de importacion de hojas de ruta desde Excel o CSV.
+
+- `parse_csv_file(...)`: transforma CSV en estructura de hoja + remitos.
+- `parse_xlsx_file(...)`: transforma Excel en estructura de hoja + remitos.
+- `parse_tabular_file(...)`: selecciona parser CSV/XLSX segun extension para reutilizar en previsualizacion.
+- `import_tabular_file(...)`: persiste la importacion tabular usando la misma logica de dominio.
+
+## tracking/services/conformados.py
+
+Servicio de alta de evidencias y registros de no entrega.
+
+- `registrar_evidencia(...)`: crea `Evidencia`, actualiza `Remito` y audita la carga.
+- `registrar_intento_no_entregado(...)`: crea `IntentoEntrega`, actualiza `Remito` y audita el evento.
+
+## tracking/services/admin_ops.py
+
+Servicio de operaciones administrativas sobre evidencias y hojas.
+
+- `validar_evidencia(...)`: actualiza la validacion de la evidencia y el estado del remito.
+- `cerrar_hoja_ruta(...)`: cambia la hoja a cerrada y registra el evento.
+
+## tracking/models.py
+
+Define entidades del dominio de trazabilidad y conformados.
+
+- `HojaRuta`: representa hoja importada del ERP y su estado operativo.
+- `Remito`: representa cada documento asociado a una hoja.
+- `Evidencia`: guarda archivos cargados por canal y estado de validacion.
+- `IntentoEntrega`: registra intentos no concretados y motivo.
+- `EventoTrazabilidad`: bitacora auditable de eventos del circuito.
+- `UserProfile`: perfil interno con rol y permisos de compartir links por canal.
+- `hoja_ruta_pdf_upload_to(...)`: construye ruta `hojas-ruta/{oid}/original.ext` para PDF.
+- `conformado_upload_to(...)`: construye ruta `conformados/{oid}/{remito_uid}/{timestamp}.ext`.
+
+## tracking/views.py
+
+Vistas HTTP iniciales para panel y portales publicos.
+
+- `root_redirect(...)`: redirige `/` hacia panel interno.
+- `login_view(...)`: autentica usuarios internos.
+- `logout_view(...)`: cierra sesion de usuario.
+- `panel_usuarios(...)`: listado de usuarios internos con acciones CRUD.
+- `panel_permisos(...)`: muestra matriz de permisos por rol.
+- `panel_crear_usuario(...)`: alta de usuarios internos.
+- `panel_editar_usuario(...)`: edicion de usuarios internos.
+- `panel_eliminar_usuario(...)`: eliminacion de usuarios internos.
+- `panel_home(...)`: muestra listado basico de hojas cargadas.
+- `panel_hoja_detalle(...)`: muestra detalle de hoja con filtros de remitos y contexto operativo.
+- `panel_evidencias(...)`: lista evidencias recientes para revision administrativa.
+- `panel_importar_pdf(...)`: recibe el PDF, llama al servicio de importacion y redirige al panel.
+- `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF y luego confirmar la importacion.
+- `panel_importar_excel(...)`: permite previsualizar cabecera/remitos de Excel/CSV y luego confirmar la importacion.
+- `conformados_portal(...)`: valida existencia/estado de hoja y lista remitos por canal.
+- `conformados_portal(...)`: agrega flujo por pasos (buscar/escaneo de remito, seleccion y accion unica).
+- `_find_remito_in_hoja(...)`: valida remito dentro de la hoja y soporta payload QR con remito embebido.
+- `subir_evidencia(...)`: recibe archivo de conformado y crea la evidencia.
+- `no_entregado(...)`: registra un intento de entrega no concretada.
+- `validar_evidencia(...)`: permite validar, observar o rechazar una evidencia.
+- `cerrar_hoja(...)`: cierra operativamente una hoja de ruta.
+
+## tracking/urls.py
+
+Define endpoints iniciales del modulo tracking.
+
+- ``: redireccion raiz hacia panel.
+- `accounts/login/`: login del panel interno.
+- `accounts/logout/`: cierre de sesion.
+- `panel/`: entrada de panel interno.
+- `panel/permisos/`: matriz de permisos por rol.
+- `panel/usuarios/`: listado de usuarios internos.
+- `panel/usuarios/nuevo/`: alta de usuario interno con rol.
+- `panel/usuarios/<id>/editar/`: edicion de usuario interno.
+- `panel/usuarios/<id>/eliminar/`: eliminacion de usuario interno.
+- `panel/hojas/<oid>/`: detalle de hoja con filtros.
+- `panel/importar/pdf/`: formulario y procesamiento de importacion de PDF.
+- `panel/evidencias/`: listado de evidencias para revision.
+- `panel/evidencias/<id>/validar/`: formulario de validacion administrativa.
+- `panel/hojas/<oid>/cerrar/`: confirmacion de cierre de hoja.
+- `conformados/<canal>/<oid>/`: portal publico por canal y hoja.
+- `conformados/<canal>/<oid>/subir/`: alta publica de evidencia.
+- `conformados/<canal>/<oid>/no-entregado/`: alta publica de intento fallido.
+
+## tracking/admin.py
+
+Configuracion del admin para operacion interna de entidades principales.
+
+- `HojaRutaAdmin`: filtros y busquedas de hojas.
+- `RemitoAdmin`: filtros y busquedas de remitos.
+- `EvidenciaAdmin`: revision rapida de evidencias por canal/estado.
+- `IntentoEntregaAdmin`: consulta de no entregados.
+- `EventoTrazabilidadAdmin`: auditoria de eventos.
+- `UserProfileAdmin`: administracion de roles y permisos de compartir links.
+
+## tracking/migrations/0001_initial.py
+
+Migracion inicial del dominio `tracking`.
+
+- crea tablas para `HojaRuta`, `Remito`, `Evidencia`, `IntentoEntrega`, `EventoTrazabilidad`.
+
+## tracking/migrations/0002_alter_evidencia_archivo_and_more.py
+
+Migracion de ajuste para rutas de almacenamiento de archivos.
+
+- actualiza `Evidencia.archivo` y `HojaRuta.archivo_pdf_original` para usar funciones `upload_to` alineadas al dominio.
+
+## tracking/migrations/0003_userprofile.py
+
+Migracion de perfiles de usuario y roles internos.
+
+- crea `UserProfile` vinculado a `User` con rol y permisos de compartir links.
+
+## templates/tracking/panel_home.html
+
+Template del panel interno con estilo Bootstrap, filtros y accesos de gestion.
+
+## templates/tracking/panel_hoja_detalle.html
+
+Template de detalle de hoja con filtros de remitos, evidencias e intentos recientes.
+
+## templates/tracking/panel_crear_usuario.html
+
+Template para alta de usuario interno con rol.
+
+## templates/tracking/panel_usuarios.html
+
+Template para listar usuarios internos y navegar al CRUD.
+
+## templates/tracking/panel_permisos.html
+
+Template de referencia con matriz de permisos por rol.
+
+## templates/tracking/panel_editar_usuario.html
+
+Template para editar datos y rol de un usuario interno.
+
+## templates/tracking/panel_eliminar_usuario.html
+
+Template para confirmar y ejecutar la eliminacion de un usuario.
+
+## templates/tracking/panel_evidencias.html
+
+Template basico para listar evidencias y acceder a su revision.
+
+## templates/tracking/validar_evidencia.html
+
+Template para validar, observar o rechazar una evidencia.
+
+## templates/tracking/cerrar_hoja.html
+
+Template para confirmar el cierre operativo de una hoja.
+
+## templates/tracking/importar_pdf.html
+
+Template Bootstrap para subir PDF, previsualizar datos detectados y confirmar importacion.
+
+## templates/tracking/importar_excel.html
+
+Template Bootstrap para subir Excel/CSV, previsualizar datos detectados y confirmar importacion.
+
+## templates/tracking/estado_hoja.html
+
+Template Bootstrap de estado para hoja inexistente o cerrada en portal publico.
+
+## templates/tracking/conformados_portal.html
+
+Template Bootstrap responsivo con UX por pasos para canal publico:
+
+- filtro por remito (manual o escaneo QR desde camara del navegador).
+- fallback de escaneo con `jsQR` en navegadores sin `BarcodeDetector`.
+- remito seleccionado con detalle visible.
+- una sola accion activa a la vez: cargar conformado o informar no entregado.
+
+## templates/base.html
+
+Layout base compartido por todos los templates.
+
+- carga Bootstrap CSS/JS desde `static/vendor/bootstrap/`.
+- deja `bootstrap-icons` como unica dependencia por CDN.
+- centraliza navbar responsive y estilos globales mobile-first.
+
+## templates/registration/login.html
+
+Template de autenticacion para ingreso al panel interno.
+
+## Regla frontend mobile-first
+
+Todos los templates del proyecto deben ser responsive mobile-first.
+
+- priorizar navegacion y formularios para uso en celular.
+- no usar dependencias CDN para Bootstrap CSS/JS; se deben servir desde `static/`.
+- se permite CDN unicamente para `bootstrap-icons`.

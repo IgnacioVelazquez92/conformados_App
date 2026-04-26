@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Editar usuario{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4">
+    <h1 class="h4 page-heading">Editar usuario</h1>
+    <p class="page-subheading">Usuario: {{ usuario.username }}</p>
+
+    {% if form.errors %}
+        <div class="alert alert-danger">{{ form.errors }}</div>
+    {% endif %}
+
+    <form method="post" class="row g-3">
+        {% csrf_token %}
+        <div class="col-12">{{ form.as_p }}</div>
+        <div class="col-12 form-actions">
+            <button class="btn btn-dark" type="submit">Guardar cambios</button>
+            <a class="btn btn-outline-secondary" href="/panel/usuarios/">Volver</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
