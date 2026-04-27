@@ -105,6 +105,7 @@ Configuracion de despliegue especifica para Railway.
 - extiende `production.py`.
 - usa hosts por defecto de Railway y `RAILWAY_PUBLIC_DOMAIN` para CSRF.
 - permite configurar origenes CSRF adicionales con `DJANGO_CSRF_TRUSTED_ORIGINS`.
+- usa `WHITENOISE_USE_FINDERS` activo por defecto para servir estaticos aunque Railway no ejecute `collectstatic`.
 
 ## config/urls.py
 
@@ -112,6 +113,14 @@ Router principal del proyecto.
 
 - `urlpatterns`: conecta `admin/` y rutas de `tracking`.
 - en modo debug sirve `MEDIA_URL` para ver archivos cargados localmente.
+
+## config/wsgi.py
+
+Inicializacion WSGI para Gunicorn/Railway.
+
+- registra logs tempranos de arranque.
+- carga la aplicacion Django.
+- en `config.settings.railway`, ejecuta migraciones y `ensure_initial_admin` al arrancar si `DJANGO_RUN_STARTUP_COMMANDS=1`.
 
 ## tracking/forms.py
 

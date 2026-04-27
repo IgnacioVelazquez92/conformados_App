@@ -23,8 +23,14 @@ _wsgi_logger.info("WSGI startup — DJANGO_SETTINGS_MODULE=%s", os.environ.get("
 
 try:
     from django.core.wsgi import get_wsgi_application
+    from django.core.management import call_command
 
     _django_app = get_wsgi_application()
+    if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith("railway") and os.getenv("DJANGO_RUN_STARTUP_COMMANDS", "1") == "1":
+        _wsgi_logger.info("Running Railway startup commands: migrate + ensure_initial_admin")
+        call_command("migrate", interactive=False, verbosity=1)
+        call_command("ensure_initial_admin", verbosity=1)
+        _wsgi_logger.info("Railway startup commands completed.")
     _wsgi_logger.info("Django WSGI application loaded successfully.")
 except Exception:  # noqa: BLE001
     _wsgi_logger.critical(
@@ -44,4 +50,3 @@ def application(environ, start_response):  # type: ignore[override]
             traceback.format_exc(),
         )
         raise
-

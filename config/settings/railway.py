@@ -15,6 +15,7 @@ ALLOWED_HOSTS = [
 ]
 
 RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+WHITENOISE_USE_FINDERS = os.getenv("WHITENOISE_USE_FINDERS", "1") == "1"
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
@@ -126,4 +127,3 @@ try:
         _check_db_connection()
 except Exception:  # noqa: BLE001
     pass  # Apps not ready yet; the check will be skipped silently.
-
