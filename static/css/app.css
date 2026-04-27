@@ -95,6 +95,40 @@ body {
     width: 100%;
 }
 
+.scanner-frame {
+    aspect-ratio: 4 / 3;
+    background: #111827;
+    max-height: 70vh;
+    position: relative;
+}
+
+.scanner-video {
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+}
+
+.scanner-target {
+    border: 2px solid #ffffff;
+    border-radius: 0.75rem;
+    box-shadow: 0 0 0 999px rgba(17, 24, 39, 0.42), 0 0 18px rgba(255, 255, 255, 0.25);
+    height: min(62vw, 280px);
+    left: 50%;
+    max-height: 70%;
+    max-width: 70%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(62vw, 280px);
+}
+
+.scanner-target span {
+    border: 1px dashed rgba(255, 255, 255, 0.75);
+    border-radius: 0.45rem;
+    inset: 12%;
+    position: absolute;
+}
+
 @media (max-width: 767.98px) {
     main.container {
         padding-left: 0.85rem;
@@ -132,5 +166,14 @@ body {
         border-radius: 0.5rem;
         height: 68vh;
         min-height: 420px;
+    }
+
+    .scanner-frame {
+        aspect-ratio: 3 / 4;
+    }
+
+    .scanner-target {
+        height: min(72vw, 300px);
+        width: min(72vw, 300px);
     }
 }

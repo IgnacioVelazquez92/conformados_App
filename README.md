@@ -225,6 +225,8 @@ Si falla la cámara:
 - permitir ingresar número de remito
 - mostrar advertencia
 
+El escaneo desde móvil debe guiar al operador con un cuadro central para apuntar el QR, priorizar la lectura de esa zona y mantener la entrada manual como respaldo.
+
 ---
 
 ## ❌ No entregado

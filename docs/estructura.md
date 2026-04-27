@@ -78,6 +78,7 @@ Estilos globales de interfaz del proyecto.
 - variables visuales, cards y layout compartido.
 - ajustes mobile-first para contenedores y tablas en pantallas chicas.
 - estilos del visor administrativo de evidencias para imagenes y PDF.
+- estilos del marco de escaneo QR con guia central y sombreado externo.
 
 ## static/js/app.js
 
@@ -367,7 +368,10 @@ Template Bootstrap de estado para hoja inexistente o cerrada en portal publico.
 Template Bootstrap responsivo con UX por pasos para canal publico:
 
 - filtro por remito (manual o escaneo QR desde camara del navegador).
-- fallback de escaneo con `jsQR` en navegadores sin `BarcodeDetector`.
+- guia visual para centrar el QR del remito dentro de un cuadro de escaneo.
+- escaneo con recorte central usando `jsQR` para priorizar el QR apuntado e ignorar ruido alrededor.
+- fallback de escaneo con `BarcodeDetector` cuando el recorte central no detecta codigo.
+- solicita camara trasera con mayor resolucion ideal y aplica enfoque/exposicion continuos o luz cuando el navegador lo soporta.
 - remito seleccionado con detalle visible.
 - formulario de evidencia con opcion rapida para sacar foto desde camara o subir imagen/PDF.
 - una sola accion activa a la vez: cargar conformado o informar no entregado.

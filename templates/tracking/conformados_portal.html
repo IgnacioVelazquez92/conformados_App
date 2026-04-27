@@ -27,8 +27,16 @@
             <span id="scannerSupportMsg" class="small text-secondary"></span>
         </div>
         <div class="col-12 d-none" id="scannerWrap">
-            <video id="scannerVideo" class="w-100 rounded border" playsinline autoplay muted></video>
-            <p class="small text-secondary mt-2 mb-0">Apunta al QR del remito para filtrar automaticamente.</p>
+            <div class="scanner-frame rounded border overflow-hidden">
+                <video id="scannerVideo" class="scanner-video" playsinline autoplay muted></video>
+                <div class="scanner-target" aria-hidden="true">
+                    <span></span>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                <p class="small text-secondary mb-0 flex-grow-1">Centra el QR dentro del cuadro, acerca el telefono hasta que ocupe buena parte del marco y evita reflejos.</p>
+                <button class="btn btn-outline-secondary btn-sm d-none" type="button" id="torchScannerBtn">Luz</button>
+            </div>
         </div>
     </form>
 </section>
@@ -119,6 +127,7 @@
     const input = document.getElementById("remitoFilter");
     const form = document.getElementById("scannerFilterForm");
     const support = document.getElementById("scannerSupportMsg");
+    const torchBtn = document.getElementById("torchScannerBtn");
     const hasBarcodeDetector = "BarcodeDetector" in window;
     const hasJsQr = typeof window.jsQR === "function";
 
@@ -132,6 +141,7 @@
     let detector = null;
     let canvas = null;
     let context = null;
+    let torchEnabled = false;
 
     if (!supported) {
         support.textContent = "Tu navegador no soporta escaneo QR en tiempo real. Usa ingreso manual.";
@@ -157,41 +167,115 @@
         wrap.classList.add("d-none");
         stopBtn.classList.add("d-none");
         startBtn.classList.remove("d-none");
+        if (torchBtn) {
+            torchBtn.classList.add("d-none");
+            torchEnabled = false;
+        }
+    }
+
+    function submitScannedValue(value) {
+        input.value = value.trim();
+        stopScanner().then(() => form.submit());
+    }
+
+    function buildScanArea() {
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        const size = Math.round(Math.min(width, height) * 0.62);
+        return {
+            x: Math.round((width - size) / 2),
+            y: Math.round((height - size) / 2),
+            size: size,
+        };
+    }
+
+    function scanWithJsQr() {
+        if (!hasJsQr) {
+            return null;
+        }
+
+        if (!canvas) {
+            canvas = document.createElement("canvas");
+            context = canvas.getContext("2d", { willReadFrequently: true });
+        }
+
+        if (!video.videoWidth || !video.videoHeight || !context) {
+            return null;
+        }
+
+        const area = buildScanArea();
+        canvas.width = area.size;
+        canvas.height = area.size;
+        context.drawImage(video, area.x, area.y, area.size, area.size, 0, 0, area.size, area.size);
+
+        let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        let code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+        if (code && code.data) {
+            return code.data;
+        }
+
+        code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+        return code && code.data ? code.data : null;
     }
 
     async function scanLoop() {
         try {
+            const focusedCode = scanWithJsQr();
+            if (focusedCode) {
+                submitScannedValue(focusedCode);
+                return;
+            }
+
             if (hasBarcodeDetector && detector) {
                 const barcodes = await detector.detect(video);
                 if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                    input.value = barcodes[0].rawValue;
-                    await stopScanner();
-                    form.submit();
+                    submitScannedValue(barcodes[0].rawValue);
                 }
                 return;
             }
-
-            if (!canvas) {
-                canvas = document.createElement("canvas");
-                context = canvas.getContext("2d", { willReadFrequently: true });
-            }
-
-            if (!video.videoWidth || !video.videoHeight || !context) {
-                return;
-            }
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-            const code = window.jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-            if (code && code.data) {
-                input.value = code.data;
-                await stopScanner();
-                form.submit();
-            }
         } catch (error) {
             support.textContent = "No se pudo leer el QR. Prueba mejor luz o enfoque.";
+        }
+    }
+
+    async function improveCameraTrack() {
+        const track = stream && stream.getVideoTracks()[0];
+        if (!track || !track.getCapabilities) {
+            return;
+        }
+
+        const capabilities = track.getCapabilities();
+        const constraints = { advanced: [] };
+
+        if (capabilities.focusMode && capabilities.focusMode.includes("continuous")) {
+            constraints.advanced.push({ focusMode: "continuous" });
+        }
+
+        if (capabilities.exposureMode && capabilities.exposureMode.includes("continuous")) {
+            constraints.advanced.push({ exposureMode: "continuous" });
+        }
+
+        if (constraints.advanced.length > 0 && track.applyConstraints) {
+            try {
+                await track.applyConstraints(constraints);
+            } catch (error) {
+                // Algunos navegadores informan capacidades pero rechazan el ajuste.
+            }
+        }
+
+        if (torchBtn && capabilities.torch && track.applyConstraints) {
+            torchBtn.classList.remove("d-none");
+            torchBtn.onclick = async function () {
+                torchEnabled = !torchEnabled;
+                try {
+                    await track.applyConstraints({ advanced: [{ torch: torchEnabled }] });
+                    torchBtn.classList.toggle("btn-secondary", torchEnabled);
+                    torchBtn.classList.toggle("btn-outline-secondary", !torchEnabled);
+                } catch (error) {
+                    torchEnabled = false;
+                    support.textContent = "La luz de la camara no esta disponible en este navegador.";
+                }
+            };
         }
     }
 
@@ -201,14 +285,21 @@
                 detector = new BarcodeDetector({ formats: ["qr_code"] });
             }
             stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: "environment" } },
+                video: {
+                    facingMode: { ideal: "environment" },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                },
                 audio: false,
             });
             video.srcObject = stream;
+            await video.play();
+            await improveCameraTrack();
             wrap.classList.remove("d-none");
             startBtn.classList.add("d-none");
             stopBtn.classList.remove("d-none");
-            timer = setInterval(scanLoop, 700);
+            support.textContent = "Ubica el QR dentro del cuadro y espera el enfoque.";
+            timer = setInterval(scanLoop, 350);
         } catch (error) {
             support.textContent = "No se pudo iniciar camara. Revisa permisos del navegador.";
             await stopScanner();
