@@ -36,10 +36,12 @@ Variables de entorno de referencia para configuracion local y despliegue.
 - `SQLITE_PATH`: ruta opcional de base local SQLite.
 - `DB_*`: conexion PostgreSQL para produccion.
 - `DATABASE_URL`: conexion PostgreSQL completa usada por Railway.
+- `PG*`: variables PostgreSQL generadas por Railway cuando no se usa `DATABASE_URL`.
 - `DB_SSL_REQUIRE`: activa SSL al parsear `DATABASE_URL`.
 - `DJANGO_SECURE_*`: controles de redireccion HTTPS y HSTS en produccion.
 - `INITIAL_ADMIN_*`: credenciales privadas del superusuario idempotente; no se documentan con valores reales en `.env.example`.
 - `AWS_*`: parametros para storage bucket en produccion.
+- `BUCKET_*`: variables del bucket generadas por Railway, equivalentes a `AWS_*`.
 - `DJANGO_CSRF_TRUSTED_ORIGINS`: origenes HTTPS confiables separados por coma.
 
 ## config/settings/base.py
@@ -90,8 +92,9 @@ Configuracion local para desarrollo.
 Configuracion para despliegue.
 
 - base de datos PostgreSQL.
-- usa `DATABASE_URL` si esta disponible y cae a `DB_*` si no.
+- usa `DATABASE_URL` si esta disponible y cae a `DB_*` o `PG*` si no.
 - storage bucket S3 compatible.
+- acepta credenciales de bucket con nombres `AWS_*` o `BUCKET_*`.
 - archivos estaticos con `CompressedManifestStaticFilesStorage`.
 - cookies seguras, redireccion HTTPS configurable, HSTS configurable y cabecera proxy https.
 
