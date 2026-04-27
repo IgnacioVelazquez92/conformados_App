@@ -38,7 +38,7 @@ Variables de entorno de referencia para configuracion local y despliegue.
 - `DATABASE_URL`: conexion PostgreSQL completa usada por Railway.
 - `DB_SSL_REQUIRE`: activa SSL al parsear `DATABASE_URL`.
 - `DJANGO_SECURE_*`: controles de redireccion HTTPS y HSTS en produccion.
-- `INITIAL_ADMIN_*`: credenciales iniciales del superusuario idempotente.
+- `INITIAL_ADMIN_*`: credenciales privadas del superusuario idempotente; no se documentan con valores reales en `.env.example`.
 - `AWS_*`: parametros para storage bucket en produccion.
 - `DJANGO_CSRF_TRUSTED_ORIGINS`: origenes HTTPS confiables separados por coma.
 
@@ -143,7 +143,7 @@ Servicio de autenticacion/autorizacion de usuario interno.
 
 Comando idempotente para crear el usuario administrador inicial durante deploy.
 
-- `Command.handle(...)`: lee `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_PASSWORD` e `INITIAL_ADMIN_EMAIL`; si el usuario ya existe no modifica nada, si no existe crea superusuario.
+- `Command.handle(...)`: lee `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_PASSWORD` e `INITIAL_ADMIN_EMAIL`; si falta password no crea nada, si el usuario ya existe no modifica nada, si no existe crea superusuario.
 
 ## tracking/services/import_pdf.py
 

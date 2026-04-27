@@ -440,8 +440,13 @@ DB_SSL_REQUIRE=1
 RAILWAY_PUBLIC_DOMAIN=tu-dominio.up.railway.app
 DJANGO_SECURE_SSL_REDIRECT=1
 DJANGO_SECURE_HSTS_SECONDS=0
+```
+
+Variables privadas para crear el primer admin durante deploy:
+
+```text
 INITIAL_ADMIN_USERNAME=ivelazquez
-INITIAL_ADMIN_PASSWORD=12345678**
+INITIAL_ADMIN_PASSWORD=<definir-en-railway>
 INITIAL_ADMIN_EMAIL=
 ```
 
@@ -461,7 +466,7 @@ El `Procfile` ejecuta:
 python manage.py migrate && python manage.py ensure_initial_admin && python manage.py collectstatic --noinput && python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
 ```
 
-`ensure_initial_admin` solo crea el usuario inicial si no existe. Si `ivelazquez` ya existe, no cambia la clave ni permisos.
+`ensure_initial_admin` solo crea el usuario inicial si `INITIAL_ADMIN_PASSWORD` esta configurada y el usuario no existe. Si `ivelazquez` ya existe, no cambia la clave ni permisos.
 
 Regla:
 

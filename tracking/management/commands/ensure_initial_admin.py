@@ -9,8 +9,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         username = os.getenv("INITIAL_ADMIN_USERNAME", "ivelazquez")
-        password = os.getenv("INITIAL_ADMIN_PASSWORD", "12345678**")
+        password = os.getenv("INITIAL_ADMIN_PASSWORD", "")
         email = os.getenv("INITIAL_ADMIN_EMAIL", "")
+
+        if not password:
+            self.stdout.write(
+                self.style.WARNING(
+                    "INITIAL_ADMIN_PASSWORD no esta configurada. No se crea admin inicial."
+                )
+            )
+            return
 
         User = get_user_model()
         if User.objects.filter(username=username).exists():
