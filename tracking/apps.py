@@ -13,8 +13,9 @@ class TrackingConfig(AppConfig):
         """Run startup diagnostics once the app registry is fully loaded."""
         import os  # noqa: PLC0415
 
-        # Only run the DB check in Railway/production environments.
-        if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith("railway"):
+        # Diagnostic only. Keep disabled by default because ready() also runs
+        # during commands like collectstatic and migrations.
+        if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith("railway") and os.getenv("RAILWAY_CHECK_DB_ON_READY", "0") == "1":
             self._check_db_connection()
 
     @staticmethod
@@ -32,4 +33,3 @@ class TrackingConfig(AppConfig):
                 exc,
                 exc_info=True,
             )
-

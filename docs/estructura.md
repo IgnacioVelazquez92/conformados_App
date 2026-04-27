@@ -28,6 +28,13 @@ Comando de arranque para Railway.
 - ejecuta `collectstatic`.
 - levanta Gunicorn contra `config.wsgi:application`.
 
+## railway.json
+
+Configuracion declarativa de Railway.
+
+- `build.buildCommand`: ejecuta `python manage.py collectstatic --noinput` durante el build.
+- `deploy.startCommand`: ejecuta migraciones, asegura el admin inicial y levanta Gunicorn.
+
 ## .env.example
 
 Variables de entorno de referencia para configuracion local y despliegue.
@@ -39,6 +46,9 @@ Variables de entorno de referencia para configuracion local y despliegue.
 - `PG*`: variables PostgreSQL generadas por Railway cuando no se usa `DATABASE_URL`.
 - `DB_SSL_REQUIRE`: activa SSL al parsear `DATABASE_URL`.
 - `DJANGO_SECURE_*`: controles de redireccion HTTPS y HSTS en produccion.
+- `DJANGO_RUN_STARTUP_COMMANDS`: permite ejecutar migraciones/admin desde WSGI como respaldo.
+- `WHITENOISE_USE_FINDERS`: permite servir estaticos desde finders si no existe `staticfiles`.
+- `RAILWAY_CHECK_DB_ON_READY`: activa diagnostico opcional de DB en `AppConfig.ready`.
 - `INITIAL_ADMIN_*`: credenciales privadas del superusuario idempotente; no se documentan con valores reales en `.env.example`.
 - `AWS_*`: parametros para storage bucket en produccion.
 - `BUCKET_*`: variables del bucket generadas por Railway, equivalentes a `AWS_*`.
@@ -156,6 +166,12 @@ Servicio de autenticacion/autorizacion de usuario interno.
 Comando idempotente para crear el usuario administrador inicial durante deploy.
 
 - `Command.handle(...)`: lee `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_PASSWORD` e `INITIAL_ADMIN_EMAIL`; si falta password no crea nada, si el usuario ya existe no modifica nada, si no existe crea superusuario.
+
+## tracking/apps.py
+
+Configuracion de la app `tracking`.
+
+- `TrackingConfig.ready(...)`: permite diagnostico opcional de DB solo si `RAILWAY_CHECK_DB_ON_READY=1`.
 
 ## tracking/services/import_pdf.py
 

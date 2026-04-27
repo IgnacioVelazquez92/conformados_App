@@ -440,6 +440,7 @@ DJANGO_SECURE_SSL_REDIRECT=1
 DJANGO_SECURE_HSTS_SECONDS=0
 DJANGO_RUN_STARTUP_COMMANDS=1
 WHITENOISE_USE_FINDERS=1
+RAILWAY_CHECK_DB_ON_READY=0
 ```
 
 Base de datos. La app acepta `DATABASE_URL` o las variables `PG*` que genera Railway:
@@ -477,6 +478,13 @@ python manage.py migrate && python manage.py ensure_initial_admin && python mana
 ```
 
 `ensure_initial_admin` solo crea el usuario inicial si `INITIAL_ADMIN_PASSWORD` esta configurada y el usuario no existe. Si `ivelazquez` ya existe, no cambia la clave ni permisos.
+
+`railway.json` fuerza en Railway:
+
+```text
+build: python manage.py collectstatic --noinput
+start: python manage.py migrate --noinput && python manage.py ensure_initial_admin && python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
 
 Regla:
 
