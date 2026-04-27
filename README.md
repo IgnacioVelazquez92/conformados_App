@@ -65,6 +65,8 @@ Parser interpreta estructura
 ↓
 Sistema muestra previsualizacion para confirmar
 ↓
+Sistema conserva temporalmente el archivo previsualizado
+↓
 Se crea Hoja de Ruta
 ↓
 Se crean remitos asociados
@@ -82,6 +84,9 @@ oid,nro_entrega,fecha,cliente,subcliente,remito,remito_oid,direccion,transporte,
 
 `oid` identifica la Hoja de Ruta y `remito_oid` identifica el remito individual que viene en el QR fisico del remito.
 
+En el portal publico, el escaneo QR busca por `remito_oid`; la busqueda manual sigue usando el numero visible del remito, por ejemplo `00009-00022221`.
+Cuando el PDF de hoja de ruta incluya una columna de OID del remito, ese valor debe cargarse como `remito_oid` para asociarlo al QR fisico.
+
 #### Flujo:
 
 ```text
@@ -90,6 +95,8 @@ Usuario sube archivo
 Sistema valida formato
 ↓
 Sistema muestra previsualizacion para confirmar
+↓
+Sistema conserva temporalmente el archivo previsualizado
 ↓
 Sistema crea Hoja de Ruta y remitos
 ```
@@ -226,6 +233,7 @@ Si falla la cámara:
 - mostrar advertencia
 
 El escaneo desde móvil debe guiar al operador con un cuadro central para apuntar el QR, priorizar la lectura de esa zona y mantener la entrada manual como respaldo.
+La entrada manual debe validar el formato `00009-00022221` o 13 digitos sin guion y explicar si faltan o sobran digitos.
 
 ---
 

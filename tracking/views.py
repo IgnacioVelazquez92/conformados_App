@@ -1,4 +1,5 @@
 import re
+import uuid
 from pathlib import Path
 
 from django.contrib import messages
@@ -6,6 +7,8 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
+from django.core.files.base import File
+from django.core.files.storage import default_storage
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -27,45 +30,107 @@ from .services.conformados import registrar_evidencia, registrar_intento_no_entr
 from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_text_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf
 from .services.import_tabular import import_tabular_file, parse_tabular_file
 
-REMITO_PATTERN = re.compile(r"\d{5}-\d{8}")
+REMITO_MANUAL_PATTERN = re.compile(r"^\d{5}-\d{8}$")
+REMITO_MANUAL_DIGITS_PATTERN = re.compile(r"^\d{13}$")
+OID_PATTERN = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 PDF_EXTENSIONS = {".pdf"}
+IMPORT_PREVIEW_SESSION_KEY = "import_preview_files"
 
 
 def _normalize_code(value: str) -> str:
     return re.sub(r"\W+", "", (value or "").upper())
 
 
-def _find_remito_in_hoja(*, hoja: HojaRuta, remito_input: str) -> Remito:
+def _save_import_preview_file(request: HttpRequest, uploaded_file, kind: str) -> str:
+    token = uuid.uuid4().hex
+    original_name = Path(uploaded_file.name or "archivo").name
+    if hasattr(uploaded_file, "seek"):
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+    path = default_storage.save(f"import-preview/{request.user.pk}/{token}/{original_name}", uploaded_file)
+    previews = request.session.get(IMPORT_PREVIEW_SESSION_KEY, {})
+    previews[token] = {
+        "path": path,
+        "name": original_name,
+        "kind": kind,
+        "content_type": getattr(uploaded_file, "content_type", "") or "",
+    }
+    request.session[IMPORT_PREVIEW_SESSION_KEY] = previews
+    request.session.modified = True
+    return token
+
+
+def _get_import_preview_meta(request: HttpRequest, token: str, kind: str) -> dict[str, str]:
+    previews = request.session.get(IMPORT_PREVIEW_SESSION_KEY, {})
+    meta = previews.get(token)
+    if not meta or meta.get("kind") != kind:
+        raise ValueError("No se encontro el archivo previsualizado. Seleccionalo nuevamente.")
+    if not default_storage.exists(meta["path"]):
+        raise ValueError("El archivo previsualizado ya no esta disponible. Seleccionalo nuevamente.")
+    return meta
+
+
+def _open_import_preview_file(request: HttpRequest, token: str, kind: str) -> File:
+    meta = _get_import_preview_meta(request, token, kind)
+    return File(default_storage.open(meta["path"], "rb"), name=meta["name"])
+
+
+def _delete_import_preview_file(request: HttpRequest, token: str) -> None:
+    previews = request.session.get(IMPORT_PREVIEW_SESSION_KEY, {})
+    meta = previews.pop(token, None)
+    if meta and default_storage.exists(meta["path"]):
+        default_storage.delete(meta["path"])
+    request.session[IMPORT_PREVIEW_SESSION_KEY] = previews
+    request.session.modified = True
+
+
+def _format_manual_remito(value: str) -> str:
+    raw = (value or "").strip()
+    if REMITO_MANUAL_PATTERN.match(raw):
+        return raw
+
+    if REMITO_MANUAL_DIGITS_PATTERN.match(raw):
+        return f"{raw[:5]}-{raw[5:]}"
+
+    digits = re.sub(r"\D+", "", raw)
+    if digits:
+        missing = 13 - len(digits)
+        if missing > 0:
+            raise ValueError(f"Al numero de remito le faltan {missing} digito(s). Formato esperado: 00009-00022221.")
+        if len(digits) > 13:
+            raise ValueError("El numero de remito tiene digitos de mas. Formato esperado: 00009-00022221.")
+
+    raise ValueError("Formato de remito invalido. Usa 5 digitos, guion y 8 digitos. Ejemplo: 00009-00022221.")
+
+
+def _extract_remito_oid_from_qr(value: str) -> str:
+    raw = (value or "").strip()
+    match = OID_PATTERN.search(raw)
+    return match.group(0) if match else raw
+
+
+def _find_remito_in_hoja(*, hoja: HojaRuta, remito_input: str, origen: str = "manual") -> Remito:
     raw = (remito_input or "").strip()
     if not raw:
         raise ValueError("Debes informar un remito para continuar.")
 
-    candidates: list[str] = [raw]
+    if origen == "qr":
+        remito_oid = _extract_remito_oid_from_qr(raw)
+        normalized_oid = _normalize_code(remito_oid)
+        for remito in hoja.remitos.only("id", "remito_uid"):
+            if _normalize_code(remito.remito_uid) == normalized_oid:
+                return remito
+        raise ValueError("El QR escaneado no corresponde a un remito de esta hoja de ruta.")
 
-    hyphenated = REMITO_PATTERN.search(raw)
-    if hyphenated:
-        candidates.append(hyphenated.group(0))
+    remito_numero = _format_manual_remito(raw)
+    exact = hoja.remitos.filter(numero=remito_numero).first()
+    if exact:
+        return exact
 
-    digits = re.sub(r"\D+", "", raw)
-    if len(digits) >= 13:
-        for seq in re.findall(r"\d{13}", digits):
-            candidates.append(f"{seq[:5]}-{seq[5:]}")
-
-    normalized_candidates = {_normalize_code(value) for value in candidates if value}
-
-    for candidate in candidates:
-        exact = hoja.remitos.filter(remito_uid=candidate).first() or hoja.remitos.filter(numero=candidate).first()
-        if exact:
-            return exact
-
-    for remito in hoja.remitos.only("id", "remito_uid", "numero"):
-        remito_uid_norm = _normalize_code(remito.remito_uid)
-        remito_num_norm = _normalize_code(remito.numero)
-        if remito_uid_norm in normalized_candidates or remito_num_norm in normalized_candidates:
-            return remito
-
-    raise ValueError("El remito indicado no pertenece a esta hoja de ruta.")
+    raise ValueError("No se encontro ese numero de remito en esta hoja de ruta.")
 
 
 def _build_evidencia_file_context(evidencia: Evidencia) -> dict[str, str | bool]:
@@ -368,28 +433,56 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
         return redirect("panel-home")
 
     preview = None
+    preview_token = ""
+    preview_file_name = ""
     if request.method == "POST":
-        form = ImportPdfForm(request.POST, request.FILES)
-        if form.is_valid():
-            action = request.POST.get("action", "preview")
-            pdf_file = form.cleaned_data["pdf_file"]
+        action = request.POST.get("action", "preview")
+        token = request.POST.get("preview_token", "").strip()
+
+        if action == "import" and token and "pdf_file" not in request.FILES:
+            form = ImportPdfForm()
             try:
-                text = extract_text_from_pdf(pdf_file)
-                oid = extract_oid_from_qr(pdf_file)
-                parsed = parse_hoja_ruta_pdf(text, oid=oid)
-                _validate_parsed_hoja(parsed)
+                with _open_import_preview_file(request, token, "pdf") as pdf_file:
+                    hoja = import_hoja_ruta_pdf(pdf_file)
             except Exception as exc:
                 form.add_error("pdf_file", str(exc))
+                preview_token = token
+                try:
+                    preview_file_name = _get_import_preview_meta(request, token, "pdf")["name"]
+                except Exception:
+                    preview_file_name = ""
             else:
-                preview = parsed
-                if action == "import":
-                    hoja = import_hoja_ruta_pdf(pdf_file)
-                    messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
-                    return redirect("panel-home")
+                _delete_import_preview_file(request, token)
+                messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
+                return redirect("panel-home")
+        else:
+            form = ImportPdfForm(request.POST, request.FILES)
+            if form.is_valid():
+                pdf_file = form.cleaned_data["pdf_file"]
+                try:
+                    text = extract_text_from_pdf(pdf_file)
+                    oid = extract_oid_from_qr(pdf_file)
+                    parsed = parse_hoja_ruta_pdf(text, oid=oid)
+                    _validate_parsed_hoja(parsed)
+                except Exception as exc:
+                    form.add_error("pdf_file", str(exc))
+                else:
+                    if action == "import":
+                        hoja = import_hoja_ruta_pdf(pdf_file)
+                        messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
+                        return redirect("panel-home")
+
+                    preview = parsed
+                    preview_token = _save_import_preview_file(request, pdf_file, "pdf")
+                    preview_file_name = Path(pdf_file.name or "").name
     else:
         form = ImportPdfForm()
 
-    return render(request, "tracking/importar_pdf.html", {"form": form, "preview": preview})
+    return render(
+        request,
+        "tracking/importar_pdf.html",
+        {"form": form, "preview": preview, "preview_token": preview_token, "preview_file_name": preview_file_name},
+    )
 
 
 @login_required
@@ -399,26 +492,54 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
         return redirect("panel-home")
 
     preview = None
+    preview_token = ""
+    preview_file_name = ""
     if request.method == "POST":
-        form = ImportSpreadsheetForm(request.POST, request.FILES)
-        if form.is_valid():
-            action = request.POST.get("action", "preview")
-            archivo = form.cleaned_data["archivo"]
+        action = request.POST.get("action", "preview")
+        token = request.POST.get("preview_token", "").strip()
+
+        if action == "import" and token and "archivo" not in request.FILES:
+            form = ImportSpreadsheetForm()
             try:
-                parsed = parse_tabular_file(archivo)
-                _validate_parsed_hoja(parsed)
+                with _open_import_preview_file(request, token, "tabular") as archivo:
+                    hojas, remitos = import_tabular_file(archivo, archivo)
             except Exception as exc:
                 form.add_error("archivo", str(exc))
+                preview_token = token
+                try:
+                    preview_file_name = _get_import_preview_meta(request, token, "tabular")["name"]
+                except Exception:
+                    preview_file_name = ""
             else:
-                preview = parsed
-                if action == "import":
-                    hojas, remitos = import_tabular_file(archivo, archivo)
-                    messages.success(request, f"Importacion completada: {hojas} hoja(s), {remitos} remito(s).")
-                    return redirect("panel-home")
+                _delete_import_preview_file(request, token)
+                messages.success(request, f"Importacion completada: {hojas} hoja(s), {remitos} remito(s).")
+                return redirect("panel-home")
+        else:
+            form = ImportSpreadsheetForm(request.POST, request.FILES)
+            if form.is_valid():
+                archivo = form.cleaned_data["archivo"]
+                try:
+                    parsed = parse_tabular_file(archivo)
+                    _validate_parsed_hoja(parsed)
+                except Exception as exc:
+                    form.add_error("archivo", str(exc))
+                else:
+                    if action == "import":
+                        hojas, remitos = import_tabular_file(archivo, archivo)
+                        messages.success(request, f"Importacion completada: {hojas} hoja(s), {remitos} remito(s).")
+                        return redirect("panel-home")
+
+                    preview = parsed
+                    preview_token = _save_import_preview_file(request, archivo, "tabular")
+                    preview_file_name = Path(archivo.name or "").name
     else:
         form = ImportSpreadsheetForm()
 
-    return render(request, "tracking/importar_excel.html", {"form": form, "preview": preview})
+    return render(
+        request,
+        "tracking/importar_excel.html",
+        {"form": form, "preview": preview, "preview_token": preview_token, "preview_file_name": preview_file_name},
+    )
 
 
 def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
@@ -429,6 +550,9 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
 
     remito_query = request.GET.get("remito", "").strip()
+    remito_origen = request.GET.get("origen", "manual").strip()
+    if remito_origen not in {"manual", "qr"}:
+        remito_origen = "manual"
     modo = request.GET.get("modo", "evidencia").strip()
     if modo not in {"evidencia", "no_entregado"}:
         modo = "evidencia"
@@ -437,7 +561,10 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
     remito_error = ""
     if remito_query:
         try:
-            remito_seleccionado = _find_remito_in_hoja(hoja=hoja, remito_input=remito_query)
+            remito_seleccionado = _find_remito_in_hoja(hoja=hoja, remito_input=remito_query, origen=remito_origen)
+            if remito_origen == "qr":
+                remito_query = remito_seleccionado.numero
+                remito_origen = "manual"
         except ValueError as exc:
             remito_error = str(exc)
 
@@ -452,6 +579,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
             "no_entregado_form": NoEntregadoForm(),
             "canal": canal,
             "remito_query": remito_query,
+            "remito_origen": remito_origen,
             "remito_seleccionado": remito_seleccionado,
             "remito_error": remito_error,
             "modo": modo,
@@ -466,7 +594,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
 
     form = EvidenciaForm(request.POST, request.FILES)
     try:
-        remito = _find_remito_in_hoja(hoja=hoja, remito_input=request.POST.get("remito_uid", ""))
+        remito = _find_remito_in_hoja(hoja=hoja, remito_input=request.POST.get("remito_uid", ""), origen="qr")
     except ValueError as exc:
         messages.error(request, str(exc))
         remito_query = request.POST.get("remito_uid", "").strip()
@@ -499,7 +627,8 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "evidencia_form": form,
             "no_entregado_form": NoEntregadoForm(),
             "canal": canal,
-            "remito_query": remito.remito_uid,
+            "remito_query": remito.numero,
+            "remito_origen": "manual",
             "remito_seleccionado": remito,
             "remito_error": "",
             "modo": "evidencia",
@@ -514,7 +643,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
 
     form = NoEntregadoForm(request.POST)
     try:
-        remito = _find_remito_in_hoja(hoja=hoja, remito_input=request.POST.get("remito_uid", ""))
+        remito = _find_remito_in_hoja(hoja=hoja, remito_input=request.POST.get("remito_uid", ""), origen="qr")
     except ValueError as exc:
         messages.error(request, str(exc))
         remito_query = request.POST.get("remito_uid", "").strip()
@@ -545,7 +674,8 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "evidencia_form": EvidenciaForm(),
             "no_entregado_form": form,
             "canal": canal,
-            "remito_query": remito.remito_uid,
+            "remito_query": remito.numero,
+            "remito_origen": "manual",
             "remito_seleccionado": remito,
             "remito_error": "",
             "modo": "no_entregado",

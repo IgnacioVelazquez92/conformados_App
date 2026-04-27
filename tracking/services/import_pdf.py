@@ -15,20 +15,19 @@ from django.db import transaction
 
 from tracking.models import EventoTrazabilidad, HojaRuta, Remito
 
-OID_PATTERN = re.compile(
-    r"(?P<oid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
-)
+UUID_PATTERN_TEXT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+OID_PATTERN = re.compile(rf"(?P<oid>{UUID_PATTERN_TEXT})")
 CANAL_PATH_PATTERN = re.compile(
     r"/conformados/(?:logistica|cliente|interno)/(?P<oid>[0-9a-fA-F-]{36})",
     re.IGNORECASE,
 )
 HEADER_PATTERNS = {
-    "nro_entrega": re.compile(r"(?mi)^\s*(?:n[úu]mero\s*de\s*entrega|nro\.?\s*entrega)\s*:\s*(?P<value>[^\n\r]+)"),
-    "transporte_tipo": re.compile(r"(?mi)^\s*(?:transporte\s*tipo|tipo\s*de\s*transporte)\s*:\s*(?P<value>[^\n\r]*)"),
-    "flete": re.compile(r"(?mi)^\s*flete\s*:\s*(?P<value>[^\n\r]+)"),
-    "chofer": re.compile(r"(?mi)^\s*chofer\s*:\s*(?P<value>[^\n\r]+)"),
-    "acompanante": re.compile(r"(?mi)^\s*acompa[nñ]ante\s*:\s*(?P<value>[^\n\r]+)"),
-    "transporte": re.compile(r"(?mi)^\s*(?:transporte|operador\s*log[ií]stico)\s*:\s*(?P<value>[^\n\r]+)"),
+    "nro_entrega": re.compile(r"(?mi)^\s*(?:n[úu]mero\s*de\s*entrega|nro\.?\s*entrega)[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
+    "transporte_tipo": re.compile(r"(?mi)^\s*(?:transporte\s*tipo|tipo\s*de\s*transporte)[ \t]*:[ \t]*(?P<value>[^\n\r]*)"),
+    "flete": re.compile(r"(?mi)^\s*flete[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
+    "chofer": re.compile(r"(?mi)^\s*chofer[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
+    "acompanante": re.compile(r"(?mi)^\s*acompa[nñ]ante[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
+    "transporte": re.compile(r"(?mi)^\s*(?:transporte|operador\s*log[ií]stico)[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
 }
 
 
@@ -45,10 +44,12 @@ class RemitoData:
 MIN_REMITOS_POR_HOJA = int(os.getenv("IMPORT_MIN_REMITOS", "1"))
 DATE_PATTERN = re.compile(r"(?P<date>(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}))")
 REMITO_PATTERN = re.compile(r"\b(?P<numero>\d{5}-\d{8})\b")
+REMITO_OID_PATTERN = re.compile(rf"\b(?P<remito_oid>{UUID_PATTERN_TEXT})\b")
 ROW_PATTERN = re.compile(
     r"^(?P<fecha>(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4})|(?:\d{4}[/-]\d{1,2}[/-]\d{1,2}))\s+"
     r"(?P<cliente>.+?)\s+"
     r"(?P<remito>\d{5}-\d{8})\s+"
+    rf"(?:(?P<remito_oid>{UUID_PATTERN_TEXT})\s+)?"
     r"(?P<resto>.+)$"
 )
 
@@ -201,6 +202,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
             continue
 
         numero = match.group("remito")
+        remito_uid = match.group("remito_oid") or numero
         cliente = _normalize_value(match.group("cliente"))
         resto = _normalize_value(match.group("resto"))
         direccion = resto
@@ -211,7 +213,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
 
         remitos.append(
             RemitoData(
-                remito_uid=numero,
+                remito_uid=remito_uid,
                 numero=numero,
                 cliente=cliente,
                 direccion=direccion,
@@ -229,6 +231,15 @@ def _extract_remitos(text: str) -> list[RemitoData]:
         if lowered[idx : idx + len(headers)] == headers:
             table_start = idx + len(headers)
             break
+    if table_start is None:
+        for idx, line in enumerate(lowered):
+            header_block = lowered[idx : idx + 8]
+            if line == "fecha" and "cliente" in header_block and "remito" in header_block and "direccion" in header_block:
+                table_start = idx + next(
+                    (offset + 1 for offset, header in enumerate(header_block) if header == "observacion"),
+                    len(header_block),
+                )
+                break
 
     if table_start is not None:
         body: list[str] = []
@@ -259,13 +270,20 @@ def _extract_remitos(text: str) -> list[RemitoData]:
 
             direccion = ""
             next_line = body[idx + 1] if idx + 1 < len(body) else ""
+            remito_uid = numero
+            if next_line:
+                oid_match = REMITO_OID_PATTERN.search(next_line)
+                if oid_match:
+                    remito_uid = oid_match.group("remito_oid")
+                    next_line = body[idx + 2] if idx + 2 < len(body) else ""
+
             if next_line and not REMITO_PATTERN.search(next_line) and next_line.lower() not in headers:
                 direccion = next_line
 
             if cliente and direccion:
                 remitos.append(
                     RemitoData(
-                        remito_uid=numero,
+                        remito_uid=remito_uid,
                         numero=numero,
                         cliente=cliente,
                         subcliente=subcliente,

@@ -181,10 +181,11 @@ Servicio de importacion y parseo de PDF de Hoja de Ruta.
 - `extract_text_from_pdf(...)`: obtiene texto plano del PDF.
 - `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida.
 - `_extract_labelled_value(...)`: extrae cabeceras por etiqueta (nro, flete, chofer, acompanante, transporte) con fallback de linea siguiente.
+- `_extract_labelled_value(...)`: evita tomar la linea siguiente como valor cuando una etiqueta viene vacia, como `Transporte Tipo:` antes de `Peso Total:`.
 - `_infer_transporte_tipo(...)`: infiere tipo de transporte cuando el PDF no trae valor junto a la etiqueta.
 - `_extract_date_value(...)`: extrae una fecha real evitando falsos positivos como encabezados.
 - `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito.
-- `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (fecha, cliente, remito, direccion).
+- `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (fecha, cliente, remito, OID de remito opcional, direccion).
 - `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos.
 - `_validate_parsed_hoja(...)`: valida OID, fecha, cantidad minima y campos obligatorios de remitos.
 - `import_hoja_ruta_pdf(...)`: crea o actualiza `HojaRuta`, `Remito` y eventos de trazabilidad.
@@ -197,7 +198,7 @@ Servicio de importacion de hojas de ruta desde Excel o CSV.
 - `parse_xlsx_file(...)`: transforma Excel en estructura de hoja + remitos.
 - `parse_tabular_file(...)`: selecciona parser CSV/XLSX segun extension para reutilizar en previsualizacion.
 - `import_tabular_file(...)`: persiste la importacion tabular usando la misma logica de dominio.
-- exige columna `remito_oid` y la guarda como `Remito.remito_uid` para filtrar por QR fisico del remito.
+- exige columna `remito_oid`, la valida como UUID y la guarda como `Remito.remito_uid` para filtrar por QR fisico del remito.
 
 ## tracking/services/conformados.py
 
@@ -242,11 +243,16 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `panel_hoja_detalle(...)`: muestra detalle de hoja con filtros de remitos y contexto operativo.
 - `panel_evidencias(...)`: lista evidencias recientes para revision administrativa.
 - `panel_importar_pdf(...)`: recibe el PDF, llama al servicio de importacion y redirige al panel.
-- `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF y luego confirmar la importacion.
-- `panel_importar_excel(...)`: permite previsualizar cabecera/remitos de Excel/CSV y luego confirmar la importacion.
+- `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
+- `panel_importar_excel(...)`: permite previsualizar cabecera/remitos de Excel/CSV, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
+- `_save_import_preview_file(...)`: guarda un archivo previsualizado en storage bajo `import-preview/{usuario}/{token}/`.
+- `_open_import_preview_file(...)`: reabre el archivo temporal asociado al token guardado en sesion.
+- `_delete_import_preview_file(...)`: elimina el archivo temporal tras una importacion exitosa.
 - `conformados_portal(...)`: valida existencia/estado de hoja y lista remitos por canal.
 - `conformados_portal(...)`: agrega flujo por pasos (buscar/escaneo de remito, seleccion y accion unica).
-- `_find_remito_in_hoja(...)`: valida remito dentro de la hoja y soporta payload QR con remito embebido.
+- `_format_manual_remito(...)`: valida la busqueda manual con formato `00009-00022221` o 13 digitos sin guion, informando digitos faltantes o sobrantes.
+- `_extract_remito_oid_from_qr(...)`: extrae un UUID desde el payload escaneado por QR.
+- `_find_remito_in_hoja(...)`: valida remito dentro de la hoja; busqueda manual contra `Remito.numero` y QR contra `Remito.remito_uid`.
 - `_build_evidencia_file_context(...)`: prepara URL, nombre y tipo visualizable del archivo para revision administrativa.
 - `subir_evidencia(...)`: recibe archivo de conformado y crea la evidencia.
 - `no_entregado(...)`: registra un intento de entrega no concretada.
@@ -352,12 +358,15 @@ Template para confirmar el cierre operativo de una hoja.
 
 Template Bootstrap para subir PDF, previsualizar datos detectados y confirmar importacion.
 
+- despues de previsualizar muestra el archivo temporal listo para importar sin re-seleccionarlo.
+
 ## templates/tracking/importar_excel.html
 
 Template Bootstrap para subir Excel/CSV, previsualizar datos detectados y confirmar importacion.
 
 - informa que el archivo debe incluir `oid` de hoja y `remito_oid` por cada remito.
 - muestra `remito_uid` en la previsualizacion para validar el dato que se usara al escanear QR.
+- despues de previsualizar muestra el archivo temporal listo para importar sin re-seleccionarlo.
 
 ## templates/tracking/estado_hoja.html
 
@@ -368,6 +377,7 @@ Template Bootstrap de estado para hoja inexistente o cerrada en portal publico.
 Template Bootstrap responsivo con UX por pasos para canal publico:
 
 - filtro por remito (manual o escaneo QR desde camara del navegador).
+- busqueda manual por numero de remito con ayuda de formato `00009-00022221`; el QR se resuelve por OID interno del remito.
 - guia visual para centrar el QR del remito dentro de un cuadro de escaneo.
 - escaneo con recorte central usando `jsQR` para priorizar el QR apuntado e ignorar ruido alrededor.
 - fallback de escaneo con `BarcodeDetector` cuando el recorte central no detecta codigo.

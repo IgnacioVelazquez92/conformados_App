@@ -5,13 +5,23 @@
 {% block content %}
 <section class="brand-card bg-white p-4">
     <h1 class="h4 mb-3">Importar Hoja de Ruta PDF</h1>
-    <form method="post" enctype="multipart/form-data" class="row g-3">
+    <form method="post" enctype="multipart/form-data" class="row g-3" novalidate>
         {% csrf_token %}
+        {% if preview_token %}
+            <input type="hidden" name="preview_token" value="{{ preview_token }}">
+        {% endif %}
         <div class="col-12">{{ form.as_p }}</div>
-        <p class="text-muted mb-0">Primero usa previsualizar para revisar cabecera y remitos. Luego volve a seleccionar el archivo y confirma importacion.</p>
+        <p class="text-muted mb-0">Primero usa previsualizar para revisar cabecera y remitos. Si los datos son correctos, podes importar el archivo previsualizado sin volver a seleccionarlo.</p>
+        {% if preview_token %}
+            <div class="col-12">
+                <div class="alert alert-info mb-0">Archivo listo para importar: <strong>{{ preview_file_name }}</strong></div>
+            </div>
+        {% endif %}
         <div class="col-12 form-actions">
             <button class="btn btn-outline-primary" type="submit" name="action" value="preview">Previsualizar</button>
-            <button class="btn btn-success" type="submit" name="action" value="import">Importar</button>
+            <button class="btn btn-success" type="submit" name="action" value="import">
+                {% if preview_token %}Importar archivo previsualizado{% else %}Importar{% endif %}
+            </button>
             <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
         </div>
     </form>

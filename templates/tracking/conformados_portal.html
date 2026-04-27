@@ -15,8 +15,11 @@
     <form method="get" class="row g-3" id="scannerFilterForm">
         <div class="col-12 col-md-8">
             <label for="remitoFilter" class="form-label">Codigo del remito</label>
-            <input id="remitoFilter" name="remito" class="form-control" type="text" value="{{ remito_query }}" placeholder="Ej: 00009-00022221" required>
+            <input id="remitoFilter" name="remito" class="form-control" type="text" value="{{ remito_query }}" placeholder="Ej: 00009-00022221" inputmode="numeric" pattern="\d{5}-?\d{8}" title="Usa 5 digitos, guion y 8 digitos. Ejemplo: 00009-00022221." aria-describedby="remitoHelp" required>
+            <div id="remitoHelp" class="form-text">Busqueda manual por numero de remito. El QR se valida por OID interno del remito.</div>
+            <div id="remitoFormatMsg" class="invalid-feedback">Formato esperado: 00009-00022221.</div>
             <input type="hidden" name="modo" value="{{ modo|default:'evidencia' }}">
+            <input type="hidden" name="origen" id="remitoSearchOrigin" value="manual">
         </div>
         <div class="col-12 col-md-4 d-grid align-items-end">
             <button class="btn btn-primary" type="submit">Buscar remito</button>
@@ -128,6 +131,8 @@
     const form = document.getElementById("scannerFilterForm");
     const support = document.getElementById("scannerSupportMsg");
     const torchBtn = document.getElementById("torchScannerBtn");
+    const originInput = document.getElementById("remitoSearchOrigin");
+    const formatMsg = document.getElementById("remitoFormatMsg");
     const hasBarcodeDetector = "BarcodeDetector" in window;
     const hasJsQr = typeof window.jsQR === "function";
 
@@ -175,7 +180,33 @@
 
     function submitScannedValue(value) {
         input.value = value.trim();
+        if (originInput) {
+            originInput.value = "qr";
+        }
         stopScanner().then(() => form.submit());
+    }
+
+    function validateManualRemito() {
+        if (originInput) {
+            originInput.value = "manual";
+        }
+
+        const digits = input.value.replace(/\D+/g, "");
+        let message = "";
+        if (digits.length > 0 && digits.length < 13) {
+            message = `Faltan ${13 - digits.length} digito(s). Formato esperado: 00009-00022221.`;
+        } else if (digits.length > 13) {
+            message = "Hay digitos de mas. Formato esperado: 00009-00022221.";
+        } else if (input.value.trim() && !/^\d{5}-?\d{8}$/.test(input.value.trim())) {
+            message = "Formato esperado: 00009-00022221.";
+        }
+
+        input.setCustomValidity(message);
+        if (formatMsg) {
+            formatMsg.textContent = message || "Formato esperado: 00009-00022221.";
+        }
+        input.classList.toggle("is-invalid", Boolean(message));
+        return !message;
     }
 
     function buildScanArea() {
@@ -308,6 +339,13 @@
 
     startBtn.addEventListener("click", startScanner);
     stopBtn.addEventListener("click", stopScanner);
+    input.addEventListener("input", validateManualRemito);
+    form.addEventListener("submit", function (event) {
+        if ((!originInput || originInput.value === "manual") && !validateManualRemito()) {
+            event.preventDefault();
+            input.reportValidity();
+        }
+    });
     window.addEventListener("beforeunload", stopScanner);
 })();
 </script>

@@ -81,6 +81,10 @@ def _build_parsed_from_rows(rows: list[dict[str, str]]) -> dict[str, Any]:
             raise ValueError("Cada fila debe incluir un numero de remito.")
         if not remito_oid:
             raise ValueError(f"Remito {remito_numero}: falta remito_oid.")
+        try:
+            remito_oid = str(uuid.UUID(remito_oid))
+        except ValueError as exc:
+            raise ValueError(f"Remito {remito_numero}: remito_oid debe ser un OID/UUID valido.") from exc
         if remito_oid in seen:
             raise ValueError(f"OID de remito duplicado detectado en archivo: {remito_oid}.")
         seen.add(remito_oid)
