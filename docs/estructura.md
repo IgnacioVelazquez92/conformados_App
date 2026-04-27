@@ -95,7 +95,7 @@ Configuracion para despliegue.
 - usa `DATABASE_URL` si esta disponible y cae a `DB_*` o `PG*` si no.
 - storage bucket S3 compatible.
 - acepta credenciales de bucket con nombres `AWS_*` o `BUCKET_*`.
-- archivos estaticos con `CompressedManifestStaticFilesStorage`.
+- archivos estaticos con `CompressedStaticFilesStorage` para evitar 500 si falta el manifest de `collectstatic`.
 - cookies seguras, redireccion HTTPS configurable, HSTS configurable y cabecera proxy https.
 
 ## config/settings/railway.py
