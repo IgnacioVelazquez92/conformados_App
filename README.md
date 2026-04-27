@@ -440,6 +440,9 @@ DB_SSL_REQUIRE=1
 RAILWAY_PUBLIC_DOMAIN=tu-dominio.up.railway.app
 DJANGO_SECURE_SSL_REDIRECT=1
 DJANGO_SECURE_HSTS_SECONDS=0
+INITIAL_ADMIN_USERNAME=ivelazquez
+INITIAL_ADMIN_PASSWORD=12345678**
+INITIAL_ADMIN_EMAIL=
 ```
 
 Variables para bucket S3 compatible:
@@ -455,8 +458,10 @@ AWS_S3_ENDPOINT_URL=...
 El `Procfile` ejecuta:
 
 ```text
-python manage.py migrate && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+python manage.py migrate && python manage.py ensure_initial_admin && python manage.py collectstatic --noinput && python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
 ```
+
+`ensure_initial_admin` solo crea el usuario inicial si no existe. Si `ivelazquez` ya existe, no cambia la clave ni permisos.
 
 Regla:
 

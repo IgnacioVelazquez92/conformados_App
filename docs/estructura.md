@@ -24,6 +24,7 @@ Dependencias base del backend Django.
 Comando de arranque para Railway.
 
 - ejecuta migraciones.
+- asegura el superusuario inicial con `ensure_initial_admin`.
 - ejecuta `collectstatic`.
 - levanta Gunicorn contra `config.wsgi:application`.
 
@@ -37,6 +38,7 @@ Variables de entorno de referencia para configuracion local y despliegue.
 - `DATABASE_URL`: conexion PostgreSQL completa usada por Railway.
 - `DB_SSL_REQUIRE`: activa SSL al parsear `DATABASE_URL`.
 - `DJANGO_SECURE_*`: controles de redireccion HTTPS y HSTS en produccion.
+- `INITIAL_ADMIN_*`: credenciales iniciales del superusuario idempotente.
 - `AWS_*`: parametros para storage bucket en produccion.
 - `DJANGO_CSRF_TRUSTED_ORIGINS`: origenes HTTPS confiables separados por coma.
 
@@ -136,6 +138,12 @@ Servicio de autenticacion/autorizacion de usuario interno.
 - `can_grant_staff(...)`: permiso para otorgar o quitar flag staff.
 - `update_user_with_profile(...)`: actualiza usuario y perfil de rol.
 - `delete_user_and_profile(...)`: elimina usuario y su perfil.
+
+## tracking/management/commands/ensure_initial_admin.py
+
+Comando idempotente para crear el usuario administrador inicial durante deploy.
+
+- `Command.handle(...)`: lee `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_PASSWORD` e `INITIAL_ADMIN_EMAIL`; si el usuario ya existe no modifica nada, si no existe crea superusuario.
 
 ## tracking/services/import_pdf.py
 
