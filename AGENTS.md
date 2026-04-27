@@ -136,6 +136,7 @@ El sistema externo:
 
 - PostgreSQL en Railway
 - No usar SQLite para desarrollo funcional compartido ni producción
+- SQLite queda permitido solo para desarrollo local individual
 
 ### Archivos
 
@@ -233,6 +234,7 @@ Columnas esperadas:
 - cliente
 - subcliente
 - remito
+- remito_oid
 - direccion
 - observacion
 - transporte_tipo
@@ -452,7 +454,11 @@ Flujo:
 
 Regla:
 
-> El QR del remito solo filtra dentro de la hoja. No abre una URL.
+> El QR del remito solo filtra dentro de la hoja. No abre una URL. Su valor debe coincidir con `remito_uid`, cargado desde la columna `remito_oid` del Excel/CSV.
+
+Regla critica:
+
+> Si el QR fisico del remito contiene solo el OID del remito, el PDF de Hoja de Ruta no alcanza como unica fuente operativa. La importacion debe complementarse o reemplazarse por Excel/CSV con columna `remito_oid`.
 
 ---
 
@@ -538,16 +544,16 @@ Si se rechaza, debe registrar motivo.
 
 ## 🧾 Reglas obligatorias para agentes
 
-- No usar SQLite.
+- No usar SQLite en produccion ni desarrollo funcional compartido.
 - No guardar archivos en filesystem local como destino final.
 - No crear remitos externos desde cero.
 - No crear hojas de ruta manuales sin origen ERP.
 - Toda evidencia debe estar asociada a hoja y remito.
 - El canal debe registrarse siempre.
 - El PDF es fuente inmediata.
-- CSV/Excel es fuente futura.
+- CSV/Excel es fuente operativa para vincular el QR fisico del remito cuando el PDF no trae `remito_oid`.
 - El oid en PDF debe obtenerse desde QR.
-- El QR del remito solo sirve como filtro dentro de la hoja.
+- El QR del remito solo sirve como filtro dentro de la hoja y debe buscarse contra `remito_uid`/`remito_oid`.
 - Una hoja cerrada no acepta cargas externas.
 - Subir evidencia no valida el conformado.
 - Toda acción relevante debe crear EventoTrazabilidad.

@@ -16,6 +16,7 @@ TABULAR_REQUIRED_COLUMNS = {
     "fecha",
     "cliente",
     "remito",
+    "remito_oid",
     "direccion",
 }
 TABULAR_OPTIONAL_COLUMNS = {
@@ -75,11 +76,14 @@ def _build_parsed_from_rows(rows: list[dict[str, str]]) -> dict[str, Any]:
     seen: set[str] = set()
     for row in grouped_rows:
         remito_numero = row.get("remito", "").strip()
+        remito_oid = row.get("remito_oid", "").strip()
         if not remito_numero:
             raise ValueError("Cada fila debe incluir un numero de remito.")
-        if remito_numero in seen:
-            raise ValueError(f"Remito duplicado detectado en archivo: {remito_numero}.")
-        seen.add(remito_numero)
+        if not remito_oid:
+            raise ValueError(f"Remito {remito_numero}: falta remito_oid.")
+        if remito_oid in seen:
+            raise ValueError(f"OID de remito duplicado detectado en archivo: {remito_oid}.")
+        seen.add(remito_oid)
 
         cliente = row.get("cliente", "").strip()
         direccion = row.get("direccion", "").strip()
@@ -90,7 +94,7 @@ def _build_parsed_from_rows(rows: list[dict[str, str]]) -> dict[str, Any]:
 
         remitos.append(
             RemitoData(
-                remito_uid=remito_numero,
+                remito_uid=remito_oid,
                 numero=remito_numero,
                 cliente=cliente,
                 subcliente=row.get("subcliente", "").strip(),

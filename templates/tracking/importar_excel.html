@@ -8,7 +8,7 @@
     <form method="post" enctype="multipart/form-data" class="row g-3">
         {% csrf_token %}
         <div class="col-12">{{ form.as_p }}</div>
-        <p class="text-muted mb-0">Primero usa previsualizar para validar los datos. Luego volve a seleccionar el archivo y confirma importacion.</p>
+        <p class="text-muted mb-0">El archivo debe incluir `oid` de hoja y `remito_oid` por cada remito. Primero usa previsualizar para validar los datos. Luego volve a seleccionar el archivo y confirma importacion.</p>
         <div class="col-12 form-actions">
             <button class="btn btn-outline-primary" type="submit" name="action" value="preview">Previsualizar</button>
             <button class="btn btn-success" type="submit" name="action" value="import">Importar</button>
@@ -36,6 +36,7 @@
             <thead>
                 <tr>
                     <th>Remito</th>
+                    <th>OID remito</th>
                     <th>Cliente</th>
                     <th>Subcliente</th>
                     <th>Direccion</th>
@@ -45,6 +46,7 @@
                 {% for remito in preview.remitos %}
                 <tr>
                     <td>{{ remito.numero }}</td>
+                    <td>{{ remito.remito_uid }}</td>
                     <td>{{ remito.cliente }}</td>
                     <td>{{ remito.subcliente|default:"-" }}</td>
                     <td>{{ remito.direccion }}</td>

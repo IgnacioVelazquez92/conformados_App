@@ -77,8 +77,10 @@ Se crean remitos asociados
 Formato esperado:
 
 ```text
-oid,nro_entrega,fecha,cliente,subcliente,remito,direccion,transporte,chofer
+oid,nro_entrega,fecha,cliente,subcliente,remito,remito_oid,direccion,transporte,chofer
 ```
+
+`oid` identifica la Hoja de Ruta y `remito_oid` identifica el remito individual que viene en el QR fisico del remito.
 
 #### Flujo:
 
@@ -192,13 +194,18 @@ Ejemplo:
 Ejemplo:
 
 ```text
-000100017798185290011002003277912122025
+66D4FF99-0081-4D15-B04D-37B51C26DBAE
 ```
 
 Uso:
 
 - NO abre URL
-- SOLO identifica el remito
+- SOLO identifica el remito dentro de la hoja
+- debe coincidir con la columna `remito_oid` importada por Excel/CSV
+
+Regla:
+
+> Para operar con escaneo de QR del remito, el importador Excel/CSV debe traer `remito_oid`. El PDF visible por si solo no alcanza si no contiene ese identificador por remito.
 
 ---
 
@@ -417,6 +424,43 @@ python manage.py migrate
 ```bash
 python manage.py runserver
 ```
+
+---
+
+## Deploy Railway
+
+Variables minimas:
+
+```text
+DJANGO_SETTINGS_MODULE=config.settings.railway
+DJANGO_SECRET_KEY=valor-seguro
+DJANGO_DEBUG=0
+DATABASE_URL=postgresql://...
+DB_SSL_REQUIRE=1
+RAILWAY_PUBLIC_DOMAIN=tu-dominio.up.railway.app
+DJANGO_SECURE_SSL_REDIRECT=1
+DJANGO_SECURE_HSTS_SECONDS=0
+```
+
+Variables para bucket S3 compatible:
+
+```text
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_STORAGE_BUCKET_NAME=...
+AWS_S3_REGION_NAME=...
+AWS_S3_ENDPOINT_URL=...
+```
+
+El `Procfile` ejecuta:
+
+```text
+python manage.py migrate && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+Regla:
+
+> En Railway se debe usar PostgreSQL y bucket para archivos cargados. SQLite y filesystem local quedan solo para desarrollo local.
 
 ```mermaid
 flowchart TD

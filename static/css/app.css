@@ -63,6 +63,38 @@ body {
     gap: 0.4rem;
 }
 
+.evidence-viewer {
+    background: #f8f9fa;
+    min-height: 520px;
+    padding: 1rem;
+}
+
+.evidence-image-frame {
+    align-items: center;
+    background: #111827;
+    border-radius: 0.75rem;
+    display: flex;
+    justify-content: center;
+    min-height: 460px;
+    overflow: auto;
+}
+
+.evidence-image {
+    display: block;
+    height: auto;
+    max-height: 75vh;
+    max-width: 100%;
+}
+
+.evidence-pdf {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.75rem;
+    height: 75vh;
+    min-height: 520px;
+    width: 100%;
+}
+
 @media (max-width: 767.98px) {
     main.container {
         padding-left: 0.85rem;
@@ -80,5 +112,25 @@ body {
     .form-actions > .btn,
     .cell-actions > .btn {
         width: 100%;
+    }
+
+    .evidence-viewer {
+        min-height: auto;
+        padding: 0.75rem;
+    }
+
+    .evidence-image-frame {
+        border-radius: 0.5rem;
+        min-height: 360px;
+    }
+
+    .evidence-image {
+        max-height: 68vh;
+    }
+
+    .evidence-pdf {
+        border-radius: 0.5rem;
+        height: 68vh;
+        min-height: 420px;
     }
 }

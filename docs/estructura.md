@@ -12,7 +12,20 @@ Dependencias base del backend Django.
 
 - `Django`: framework web principal.
 - `psycopg[binary]`: conexion PostgreSQL.
+- `dj-database-url`: lectura de `DATABASE_URL` para Railway/PostgreSQL.
 - `django-storages` + `boto3`: integracion con bucket object storage.
+- `gunicorn`: servidor WSGI de produccion.
+- `whitenoise`: servicio de archivos estaticos en produccion.
+- `openpyxl`: lectura de Excel.
+- `PyMuPDF`, `numpy`, `opencv-python-headless`: lectura de PDF y QR sin dependencias graficas.
+
+## Procfile
+
+Comando de arranque para Railway.
+
+- ejecuta migraciones.
+- ejecuta `collectstatic`.
+- levanta Gunicorn contra `config.wsgi:application`.
 
 ## .env.example
 
@@ -21,7 +34,11 @@ Variables de entorno de referencia para configuracion local y despliegue.
 - `DJANGO_SETTINGS_MODULE`: selecciona settings de `development` o `production`.
 - `SQLITE_PATH`: ruta opcional de base local SQLite.
 - `DB_*`: conexion PostgreSQL para produccion.
+- `DATABASE_URL`: conexion PostgreSQL completa usada por Railway.
+- `DB_SSL_REQUIRE`: activa SSL al parsear `DATABASE_URL`.
+- `DJANGO_SECURE_*`: controles de redireccion HTTPS y HSTS en produccion.
 - `AWS_*`: parametros para storage bucket en produccion.
+- `DJANGO_CSRF_TRUSTED_ORIGINS`: origenes HTTPS confiables separados por coma.
 
 ## config/settings/base.py
 
@@ -30,6 +47,7 @@ Configuracion comun de Django para todos los entornos.
 - apps, middleware, templates e internacionalizacion.
 - static/media y defaults globales.
 - `STATICFILES_DIRS`: incluye `static/` del proyecto para servir assets frontend versionados localmente.
+- usa WhiteNoise middleware para servir archivos estaticos en produccion.
 
 ## static/vendor/bootstrap/css/bootstrap.min.css
 
@@ -45,6 +63,7 @@ Estilos globales de interfaz del proyecto.
 
 - variables visuales, cards y layout compartido.
 - ajustes mobile-first para contenedores y tablas en pantallas chicas.
+- estilos del visor administrativo de evidencias para imagenes y PDF.
 
 ## static/js/app.js
 
@@ -69,8 +88,10 @@ Configuracion local para desarrollo.
 Configuracion para despliegue.
 
 - base de datos PostgreSQL.
+- usa `DATABASE_URL` si esta disponible y cae a `DB_*` si no.
 - storage bucket S3 compatible.
-- cookies seguras y cabecera proxy https.
+- archivos estaticos con `CompressedManifestStaticFilesStorage`.
+- cookies seguras, redireccion HTTPS configurable, HSTS configurable y cabecera proxy https.
 
 ## config/settings/railway.py
 
@@ -78,6 +99,7 @@ Configuracion de despliegue especifica para Railway.
 
 - extiende `production.py`.
 - usa hosts por defecto de Railway y `RAILWAY_PUBLIC_DOMAIN` para CSRF.
+- permite configurar origenes CSRF adicionales con `DJANGO_CSRF_TRUSTED_ORIGINS`.
 
 ## config/urls.py
 
@@ -92,7 +114,7 @@ Formulario de carga del PDF de Hoja de Ruta.
 
 - `ImportPdfForm`: valida que el archivo recibido sea un PDF.
 - `ImportSpreadsheetForm`: valida que el archivo recibido sea Excel o CSV.
-- `EvidenciaForm`: valida imagen/PDF de conformado, comentario y confirmacion de duplicada.
+- `EvidenciaForm`: permite sacar foto desde camara o subir imagen/PDF de conformado, valida comentario y confirmacion de duplicada.
 - `NoEntregadoForm`: valida el motivo y comentario de un intento fallido.
 - `ValidacionEvidenciaForm`: valida estado y comentario para revision administrativa.
 - `CierreHojaForm`: valida comentario opcional para cierre operativo.
@@ -138,6 +160,7 @@ Servicio de importacion de hojas de ruta desde Excel o CSV.
 - `parse_xlsx_file(...)`: transforma Excel en estructura de hoja + remitos.
 - `parse_tabular_file(...)`: selecciona parser CSV/XLSX segun extension para reutilizar en previsualizacion.
 - `import_tabular_file(...)`: persiste la importacion tabular usando la misma logica de dominio.
+- exige columna `remito_oid` y la guarda como `Remito.remito_uid` para filtrar por QR fisico del remito.
 
 ## tracking/services/conformados.py
 
@@ -187,9 +210,11 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `conformados_portal(...)`: valida existencia/estado de hoja y lista remitos por canal.
 - `conformados_portal(...)`: agrega flujo por pasos (buscar/escaneo de remito, seleccion y accion unica).
 - `_find_remito_in_hoja(...)`: valida remito dentro de la hoja y soporta payload QR con remito embebido.
+- `_build_evidencia_file_context(...)`: prepara URL, nombre y tipo visualizable del archivo para revision administrativa.
 - `subir_evidencia(...)`: recibe archivo de conformado y crea la evidencia.
 - `no_entregado(...)`: registra un intento de entrega no concretada.
 - `validar_evidencia(...)`: permite validar, observar o rechazar una evidencia.
+- `validar_evidencia(...)`: entrega contexto de visor para revisar imagenes o PDF antes de guardar la validacion.
 - `cerrar_hoja(...)`: cierra operativamente una hoja de ruta.
 
 ## tracking/urls.py
@@ -279,6 +304,9 @@ Template basico para listar evidencias y acceder a su revision.
 
 Template para validar, observar o rechazar una evidencia.
 
+- muestra visor embebido de imagen o PDF cargado antes del formulario de validacion.
+- permite abrir el archivo original en una pestaña nueva cuando se necesita inspeccion ampliada.
+
 ## templates/tracking/cerrar_hoja.html
 
 Template para confirmar el cierre operativo de una hoja.
@@ -291,6 +319,9 @@ Template Bootstrap para subir PDF, previsualizar datos detectados y confirmar im
 
 Template Bootstrap para subir Excel/CSV, previsualizar datos detectados y confirmar importacion.
 
+- informa que el archivo debe incluir `oid` de hoja y `remito_oid` por cada remito.
+- muestra `remito_uid` en la previsualizacion para validar el dato que se usara al escanear QR.
+
 ## templates/tracking/estado_hoja.html
 
 Template Bootstrap de estado para hoja inexistente o cerrada en portal publico.
@@ -302,6 +333,7 @@ Template Bootstrap responsivo con UX por pasos para canal publico:
 - filtro por remito (manual o escaneo QR desde camara del navegador).
 - fallback de escaneo con `jsQR` en navegadores sin `BarcodeDetector`.
 - remito seleccionado con detalle visible.
+- formulario de evidencia con opcion rapida para sacar foto desde camara o subir imagen/PDF.
 - una sola accion activa a la vez: cargar conformado o informar no entregado.
 
 ## templates/base.html

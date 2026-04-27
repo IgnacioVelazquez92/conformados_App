@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -27,6 +28,8 @@ from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, ext
 from .services.import_tabular import import_tabular_file, parse_tabular_file
 
 REMITO_PATTERN = re.compile(r"\d{5}-\d{8}")
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+PDF_EXTENSIONS = {".pdf"}
 
 
 def _normalize_code(value: str) -> str:
@@ -63,6 +66,27 @@ def _find_remito_in_hoja(*, hoja: HojaRuta, remito_input: str) -> Remito:
             return remito
 
     raise ValueError("El remito indicado no pertenece a esta hoja de ruta.")
+
+
+def _build_evidencia_file_context(evidencia: Evidencia) -> dict[str, str | bool]:
+    archivo = evidencia.archivo
+    if not archivo:
+        return {"available": False, "url": "", "name": "", "is_image": False, "is_pdf": False}
+
+    name = Path(archivo.name).name
+    extension = Path(archivo.name).suffix.lower()
+    try:
+        url = archivo.url
+    except ValueError:
+        return {"available": False, "url": "", "name": name, "is_image": False, "is_pdf": False}
+
+    return {
+        "available": True,
+        "url": url,
+        "name": name,
+        "is_image": extension in IMAGE_EXTENSIONS,
+        "is_pdf": extension in PDF_EXTENSIONS,
+    }
 
 
 def root_redirect(request: HttpRequest) -> HttpResponse:
@@ -454,7 +478,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
                 hoja=hoja,
                 remito=remito,
                 canal=canal,
-                archivo=form.cleaned_data["archivo"],
+                archivo=form.cleaned_data["archivo_final"],
                 comentario=form.cleaned_data.get("comentario", ""),
                 origen=form.cleaned_data.get("origen", ""),
                 permitir_duplicada=bool(form.cleaned_data.get("confirmar_duplicada")),
@@ -556,7 +580,7 @@ def validar_evidencia(request: HttpRequest, evidencia_id: int) -> HttpResponse:
     return render(
         request,
         "tracking/validar_evidencia.html",
-        {"evidencia": evidencia, "form": form},
+        {"evidencia": evidencia, "form": form, "archivo": _build_evidencia_file_context(evidencia)},
     )
 
 
