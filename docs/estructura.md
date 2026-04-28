@@ -62,6 +62,9 @@ Configuracion comun de Django para todos los entornos.
 - static/media y defaults globales.
 - `STATICFILES_DIRS`: incluye `static/` del proyecto para servir assets frontend versionados localmente.
 - usa WhiteNoise middleware para servir archivos estaticos en produccion.
+- `EVIDENCIA_MAX_IMAGE_SIZE_MB`, `EVIDENCIA_MAX_PDF_SIZE_MB`: limites de tamano para evidencias.
+- `EVIDENCIA_RATE_LIMIT_COUNT`, `EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para cargas de evidencia.
+- `NO_ENTREGADO_RATE_LIMIT_COUNT`, `NO_ENTREGADO_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para intentos no entregados.
 
 ## static/vendor/bootstrap/css/bootstrap.min.css
 
@@ -79,6 +82,7 @@ Estilos globales de interfaz del proyecto.
 - ajustes mobile-first para contenedores y tablas en pantallas chicas.
 - estilos del visor administrativo de evidencias para imagenes y PDF.
 - estilos del marco de escaneo QR con guia central y sombreado externo.
+- estilos de la previsualizacion de evidencia antes de subir.
 
 ## static/js/app.js
 
@@ -140,6 +144,7 @@ Formulario de carga del PDF de Hoja de Ruta.
 - `ImportPdfForm`: valida que el archivo recibido sea un PDF.
 - `ImportSpreadsheetForm`: valida que el archivo recibido sea Excel o CSV.
 - `EvidenciaForm`: permite sacar foto desde camara o subir imagen/PDF de conformado, valida comentario y confirmacion de duplicada.
+- `EvidenciaForm`: valida tamano maximo de imagen/PDF antes de persistir evidencia.
 - `NoEntregadoForm`: valida el motivo y comentario de un intento fallido.
 - `ValidacionEvidenciaForm`: valida estado y comentario para revision administrativa.
 - `CierreHojaForm`: valida comentario opcional para cierre operativo.
@@ -255,6 +260,10 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `_save_import_preview_file(...)`: guarda un archivo previsualizado en storage bajo `import-preview/{usuario}/{token}/`.
 - `_open_import_preview_file(...)`: reabre el archivo temporal asociado al token guardado en sesion.
 - `_delete_import_preview_file(...)`: elimina el archivo temporal tras una importacion exitosa.
+- `_get_client_ip(...)`: obtiene IP de cliente considerando `X-Forwarded-For`.
+- `_check_rate_limit(...)`: limita intentos por ventana usando cache de Django.
+- `_rate_limit_key(...)`: construye clave de limite por accion, IP, canal, hoja y remito.
+- `_evidencia_limits_context(...)`: expone limites de tamano al template publico.
 - `conformados_portal(...)`: valida existencia/estado de hoja y lista remitos por canal.
 - `conformados_portal(...)`: agrega flujo por pasos (buscar/escaneo de remito, seleccion y accion unica).
 - `_format_manual_remito(...)`: valida la busqueda manual con formato `00009-00022221` o 13 digitos sin guion, informando digitos faltantes o sobrantes.
@@ -262,7 +271,9 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `_find_remito_in_hoja(...)`: valida remito dentro de la hoja; busqueda manual contra `Remito.numero` y QR contra `Remito.remito_uid`.
 - `_build_evidencia_file_context(...)`: prepara URL, nombre y tipo visualizable del archivo para revision administrativa.
 - `subir_evidencia(...)`: recibe archivo de conformado y crea la evidencia.
+- `subir_evidencia(...)`: aplica rate limit antes de guardar evidencia publica.
 - `no_entregado(...)`: registra un intento de entrega no concretada.
+- `no_entregado(...)`: aplica rate limit antes de guardar intentos publicos.
 - `validar_evidencia(...)`: permite validar, observar o rechazar una evidencia.
 - `validar_evidencia(...)`: entrega contexto de visor para revisar imagenes o PDF antes de guardar la validacion.
 - `cerrar_hoja(...)`: cierra operativamente una hoja de ruta.
@@ -397,6 +408,7 @@ Template Bootstrap responsivo con UX por pasos para canal publico:
 - solicita camara trasera con mayor resolucion ideal y aplica enfoque/exposicion continuos o luz cuando el navegador lo soporta.
 - remito seleccionado con detalle visible.
 - formulario de evidencia con opcion rapida para sacar foto desde camara o subir imagen/PDF.
+- previsualizacion obligatoria de imagen/PDF antes de subir evidencia y validacion cliente de tamano.
 - una sola accion activa a la vez: cargar conformado o informar no entregado.
 
 ## templates/base.html

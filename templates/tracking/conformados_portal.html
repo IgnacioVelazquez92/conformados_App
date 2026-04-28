@@ -73,12 +73,29 @@
     </div>
 
     {% if modo == 'evidencia' %}
-        <form method="post" action="/conformados/{{ canal }}/{{ hoja.oid }}/subir/" enctype="multipart/form-data" class="row g-3">
+        <form method="post" action="/conformados/{{ canal }}/{{ hoja.oid }}/subir/" enctype="multipart/form-data" class="row g-3" id="evidenceUploadForm" data-max-image-bytes="{{ evidencia_limits.max_image_bytes }}" data-max-pdf-bytes="{{ evidencia_limits.max_pdf_bytes }}" data-max-image-mb="{{ evidencia_limits.max_image_mb }}" data-max-pdf-mb="{{ evidencia_limits.max_pdf_mb }}">
             {% csrf_token %}
             <input type="hidden" name="remito_uid" value="{{ remito_seleccionado.remito_uid }}">
             <div class="col-12">{{ evidencia_form.as_p }}</div>
+            <div class="col-12 d-none" id="evidencePreviewWrap">
+                <div class="border rounded p-3 bg-light">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div>
+                            <strong>Vista previa</strong>
+                            <p class="small text-secondary mb-0" id="evidencePreviewMeta"></p>
+                        </div>
+                        <button class="btn btn-outline-secondary btn-sm" type="button" id="clearEvidencePreviewBtn">Cambiar</button>
+                    </div>
+                    <img id="evidencePreviewImage" class="evidence-upload-preview d-none" alt="Vista previa de evidencia">
+                    <div id="evidencePreviewPdf" class="alert alert-secondary d-none mb-0">PDF seleccionado para subir.</div>
+                    <p class="small text-secondary mt-2 mb-0">Verifique que el conformado se lea correctamente. Si la imagen esta borrosa, cortada o ilegible, la evidencia sera rechazada.</p>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="alert alert-warning d-none mb-0" id="evidencePreviewError"></div>
+            </div>
             <div class="col-12 d-grid">
-                <button class="btn btn-success" type="submit">Subir evidencia</button>
+                <button class="btn btn-success" type="submit" id="submitEvidenceBtn" disabled>Subir evidencia</button>
             </div>
             </form>
     {% else %}
@@ -349,6 +366,142 @@
         }
     });
     window.addEventListener("beforeunload", stopScanner);
+})();
+</script>
+<script>
+(function () {
+    const form = document.getElementById("evidenceUploadForm");
+    if (!form) {
+        return;
+    }
+
+    const cameraInput = document.getElementById("id_archivo_camera");
+    const fileInput = document.getElementById("id_archivo");
+    const submitBtn = document.getElementById("submitEvidenceBtn");
+    const wrap = document.getElementById("evidencePreviewWrap");
+    const image = document.getElementById("evidencePreviewImage");
+    const pdf = document.getElementById("evidencePreviewPdf");
+    const meta = document.getElementById("evidencePreviewMeta");
+    const error = document.getElementById("evidencePreviewError");
+    const clearBtn = document.getElementById("clearEvidencePreviewBtn");
+    const maxImageBytes = Number(form.dataset.maxImageBytes || 0);
+    const maxPdfBytes = Number(form.dataset.maxPdfBytes || 0);
+    const maxImageMb = form.dataset.maxImageMb || "8";
+    const maxPdfMb = form.dataset.maxPdfMb || "15";
+    let objectUrl = "";
+
+    function selectedFile() {
+        return (cameraInput && cameraInput.files[0]) || (fileInput && fileInput.files[0]) || null;
+    }
+
+    function clearPreview() {
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = "";
+        }
+        if (image) {
+            image.src = "";
+            image.classList.add("d-none");
+        }
+        if (pdf) {
+            pdf.classList.add("d-none");
+        }
+        if (wrap) {
+            wrap.classList.add("d-none");
+        }
+        if (error) {
+            error.textContent = "";
+            error.classList.add("d-none");
+        }
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+    }
+
+    function showError(message) {
+        clearPreview();
+        if (error) {
+            error.textContent = message;
+            error.classList.remove("d-none");
+        }
+    }
+
+    function formatMb(bytes) {
+        return (bytes / 1024 / 1024).toFixed(1);
+    }
+
+    function updatePreview(changedInput) {
+        const otherInput = changedInput === cameraInput ? fileInput : cameraInput;
+        if (changedInput && changedInput.files.length && otherInput) {
+            otherInput.value = "";
+        }
+
+        clearPreview();
+        const file = selectedFile();
+        if (!file) {
+            return;
+        }
+
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        const isImage = file.type.startsWith("image/");
+        const maxBytes = isPdf ? maxPdfBytes : maxImageBytes;
+        const maxMb = isPdf ? maxPdfMb : maxImageMb;
+
+        if (!isPdf && !isImage) {
+            showError("El archivo debe ser una imagen o PDF.");
+            return;
+        }
+        if (maxBytes && file.size > maxBytes) {
+            showError(`El archivo pesa ${formatMb(file.size)} MB. Maximo permitido: ${maxMb} MB.`);
+            return;
+        }
+
+        objectUrl = URL.createObjectURL(file);
+        if (meta) {
+            meta.textContent = `${file.name} - ${formatMb(file.size)} MB`;
+        }
+        if (wrap) {
+            wrap.classList.remove("d-none");
+        }
+        if (isPdf && pdf) {
+            pdf.classList.remove("d-none");
+        }
+        if (isImage && image) {
+            image.src = objectUrl;
+            image.classList.remove("d-none");
+        }
+        if (submitBtn) {
+            submitBtn.disabled = false;
+        }
+    }
+
+    if (cameraInput) {
+        cameraInput.addEventListener("change", function () {
+            updatePreview(cameraInput);
+        });
+    }
+    if (fileInput) {
+        fileInput.addEventListener("change", function () {
+            updatePreview(fileInput);
+        });
+    }
+    if (clearBtn) {
+        clearBtn.addEventListener("click", function () {
+            if (cameraInput) {
+                cameraInput.value = "";
+            }
+            if (fileInput) {
+                fileInput.value = "";
+            }
+            clearPreview();
+        });
+    }
+    form.addEventListener("submit", function (event) {
+        if (!selectedFile()) {
+            event.preventDefault();
+            showError("Selecciona una foto o PDF y revisa la vista previa antes de subir.");
+        }
+    });
 })();
 </script>
 {% endblock %}

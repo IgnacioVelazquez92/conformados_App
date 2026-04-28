@@ -7,6 +7,8 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
+from django.conf import settings
+from django.core.cache import cache
 from django.core.files.base import File
 from django.core.files.storage import default_storage
 from django.http import HttpRequest, HttpResponse
@@ -40,6 +42,38 @@ IMPORT_PREVIEW_SESSION_KEY = "import_preview_files"
 
 def _normalize_code(value: str) -> str:
     return re.sub(r"\W+", "", (value or "").upper())
+
+
+def _get_client_ip(request: HttpRequest) -> str:
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "") or "unknown"
+
+
+def _check_rate_limit(*, key: str, limit: int, window_seconds: int) -> None:
+    count = cache.get(key, 0)
+    if count >= limit:
+        minutes = max(1, window_seconds // 60)
+        raise ValueError(f"Demasiados intentos. Espera {minutes} minutos y volve a probar.")
+    if count == 0:
+        cache.set(key, 1, window_seconds)
+    else:
+        cache.incr(key)
+
+
+def _rate_limit_key(*, action: str, request: HttpRequest, canal: str, oid: str, remito_uid: str) -> str:
+    ip = _normalize_code(_get_client_ip(request))
+    return f"rate:{action}:{ip}:{canal}:{oid}:{_normalize_code(remito_uid)}"
+
+
+def _evidencia_limits_context() -> dict[str, int]:
+    return {
+        "max_image_mb": settings.EVIDENCIA_MAX_IMAGE_SIZE_MB,
+        "max_pdf_mb": settings.EVIDENCIA_MAX_PDF_SIZE_MB,
+        "max_image_bytes": settings.EVIDENCIA_MAX_IMAGE_SIZE_MB * 1024 * 1024,
+        "max_pdf_bytes": settings.EVIDENCIA_MAX_PDF_SIZE_MB * 1024 * 1024,
+    }
 
 
 def _save_import_preview_file(request: HttpRequest, uploaded_file, kind: str) -> str:
@@ -583,6 +617,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
             "remito_seleccionado": remito_seleccionado,
             "remito_error": remito_error,
             "modo": modo,
+            "evidencia_limits": _evidencia_limits_context(),
         },
     )
 
@@ -599,6 +634,16 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
         messages.error(request, str(exc))
         remito_query = request.POST.get("remito_uid", "").strip()
         return redirect(f"/conformados/{canal}/{oid}/?remito={remito_query}&modo=evidencia")
+
+    try:
+        _check_rate_limit(
+            key=_rate_limit_key(action="evidencia", request=request, canal=canal, oid=oid, remito_uid=remito.remito_uid),
+            limit=settings.EVIDENCIA_RATE_LIMIT_COUNT,
+            window_seconds=settings.EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS,
+        )
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=evidencia")
 
     if form.is_valid():
         try:
@@ -632,6 +677,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "remito_seleccionado": remito,
             "remito_error": "",
             "modo": "evidencia",
+            "evidencia_limits": _evidencia_limits_context(),
         },
     )
 
@@ -648,6 +694,16 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
         messages.error(request, str(exc))
         remito_query = request.POST.get("remito_uid", "").strip()
         return redirect(f"/conformados/{canal}/{oid}/?remito={remito_query}&modo=no_entregado")
+
+    try:
+        _check_rate_limit(
+            key=_rate_limit_key(action="no-entregado", request=request, canal=canal, oid=oid, remito_uid=remito.remito_uid),
+            limit=settings.NO_ENTREGADO_RATE_LIMIT_COUNT,
+            window_seconds=settings.NO_ENTREGADO_RATE_LIMIT_WINDOW_SECONDS,
+        )
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=no_entregado")
 
     if form.is_valid():
         try:
@@ -679,6 +735,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "remito_seleccionado": remito,
             "remito_error": "",
             "modo": "no_entregado",
+            "evidencia_limits": _evidencia_limits_context(),
         },
     )
 

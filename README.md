@@ -277,6 +277,13 @@ Confirmación de legibilidad
 Subir
 ```
 
+Límites iniciales de seguridad:
+
+- imagen: hasta 8 MB
+- PDF: hasta 15 MB
+- evidencia externa: hasta 3 intentos cada 10 minutos por IP + hoja + remito + canal
+- no entregado: hasta 6 intentos cada 10 minutos por IP + hoja + remito + canal
+
 ---
 
 ## ⚠️ Advertencia obligatoria

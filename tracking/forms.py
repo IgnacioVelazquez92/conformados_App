@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 
 
@@ -51,8 +52,15 @@ class EvidenciaForm(forms.Form):
     def _validate_evidence_file(self, archivo):
         name = (archivo.name or "").lower()
         content_type = getattr(archivo, "content_type", "") or ""
-        if not any(name.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".pdf")) and not content_type.startswith(("image/", "application/pdf")):
+        is_pdf = name.endswith(".pdf") or content_type == "application/pdf"
+        is_image = any(name.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")) or content_type.startswith("image/")
+        if not is_image and not is_pdf:
             raise forms.ValidationError("El archivo debe ser una imagen o PDF.")
+
+        max_size_mb = settings.EVIDENCIA_MAX_PDF_SIZE_MB if is_pdf else settings.EVIDENCIA_MAX_IMAGE_SIZE_MB
+        max_size_bytes = max_size_mb * 1024 * 1024
+        if getattr(archivo, "size", 0) > max_size_bytes:
+            raise forms.ValidationError(f"El archivo no puede pesar mas de {max_size_mb} MB.")
         return archivo
 
     def clean_archivo_camera(self):
@@ -63,7 +71,7 @@ class EvidenciaForm(forms.Form):
         content_type = getattr(archivo, "content_type", "") or ""
         if not any(name.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")) and not content_type.startswith("image/"):
             raise forms.ValidationError("La foto tomada con camara debe ser una imagen.")
-        return archivo
+        return self._validate_evidence_file(archivo)
 
     def clean_archivo(self):
         archivo = self.cleaned_data.get("archivo")
@@ -73,6 +81,8 @@ class EvidenciaForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+        if self.errors:
+            return cleaned_data
         archivo_camera = cleaned_data.get("archivo_camera")
         archivo = cleaned_data.get("archivo")
         if archivo_camera and archivo:
