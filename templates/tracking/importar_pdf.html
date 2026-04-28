@@ -46,6 +46,7 @@
             <thead>
                 <tr>
                     <th>Remito</th>
+                    <th>OID remito</th>
                     <th>Cliente</th>
                     <th>Subcliente</th>
                     <th>Direccion</th>
@@ -55,6 +56,7 @@
                 {% for remito in preview.remitos %}
                 <tr>
                     <td>{{ remito.numero }}</td>
+                    <td>{{ remito.remito_uid }}</td>
                     <td>{{ remito.cliente }}</td>
                     <td>{{ remito.subcliente|default:"-" }}</td>
                     <td>{{ remito.direccion }}</td>

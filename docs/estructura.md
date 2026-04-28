@@ -186,6 +186,7 @@ Servicio de importacion y parseo de PDF de Hoja de Ruta.
 - `_merge_wrapped_uuid_lines(...)`: reconstruye UUID de remitos cortados en dos lineas por el PDF.
 - `_infer_transporte_tipo(...)`: infiere tipo de transporte cuando el PDF no trae valor junto a la etiqueta.
 - `_extract_date_value(...)`: extrae una fecha real evitando falsos positivos como encabezados.
+- `_split_cliente_subcliente(...)`: separa lineas de cliente y subcliente, manteniendo continuaciones como parentesis o `Y ...` dentro del cliente.
 - `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito.
 - `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (`oid`, fecha, cliente, remito, direccion).
 - `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos.
@@ -361,6 +362,7 @@ Template para confirmar el cierre operativo de una hoja.
 Template Bootstrap para subir PDF, previsualizar datos detectados y confirmar importacion.
 
 - despues de previsualizar muestra el archivo temporal listo para importar sin re-seleccionarlo.
+- muestra `remito_uid`/OID de remito en la previsualizacion cuando el PDF lo trae.
 
 ## templates/tracking/importar_excel.html
 

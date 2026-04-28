@@ -216,6 +216,27 @@ def _extract_date_value(text: str) -> str:
     return ""
 
 
+def _split_cliente_subcliente(client_lines: list[str]) -> tuple[str, str]:
+    if not client_lines:
+        return "", ""
+
+    cliente_parts = [client_lines[0]]
+    subcliente_parts: list[str] = []
+    for line in client_lines[1:]:
+        lowered = line.lower()
+        is_cliente_continuation = (
+            line.startswith("(")
+            or lowered.startswith(("y ", "e "))
+            or cliente_parts[-1].endswith((" DE", " DEL", " PARA", " Y"))
+        )
+        if is_cliente_continuation and not subcliente_parts:
+            cliente_parts.append(line)
+        else:
+            subcliente_parts.append(line)
+
+    return " ".join(cliente_parts), " ".join(subcliente_parts)
+
+
 def _extract_remitos(text: str) -> list[RemitoData]:
     lines = _merge_wrapped_uuid_lines([line.strip() for line in text.splitlines() if line.strip()])
 
@@ -300,8 +321,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
                 ]
 
             if client_lines:
-                cliente = client_lines[0]
-                subcliente = " ".join(client_lines[1:])
+                cliente, subcliente = _split_cliente_subcliente(client_lines)
             else:
                 prev = body[idx - 1] if idx - 1 >= 0 else ""
                 prevprev = body[idx - 2] if idx - 2 >= 0 else ""
