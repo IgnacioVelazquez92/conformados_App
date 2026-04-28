@@ -290,11 +290,15 @@ Define endpoints iniciales del modulo tracking.
 
 Configuracion del admin para operacion interna de entidades principales.
 
-- `HojaRutaAdmin`: filtros y busquedas de hojas.
-- `RemitoAdmin`: filtros y busquedas de remitos.
-- `EvidenciaAdmin`: revision rapida de evidencias por canal/estado.
-- `IntentoEntregaAdmin`: consulta de no entregados.
-- `EventoTrazabilidadAdmin`: auditoria de eventos.
+- `RemitoInline`: muestra remitos dentro de la hoja con numero, OID/remito_uid y datos operativos.
+- `EvidenciaInline`: muestra evidencias relacionadas dentro de la hoja.
+- `IntentoEntregaInline`: muestra intentos fallidos relacionados dentro de la hoja.
+- `EventoTrazabilidadInline`: muestra eventos de auditoria relacionados dentro de la hoja.
+- `HojaRutaAdmin`: muestra todos los datos principales de la hoja, archivo PDF, auditoria e inlines relacionados.
+- `RemitoAdmin`: muestra y permite buscar por numero, OID/remito_uid, cliente, direccion y hoja.
+- `EvidenciaAdmin`: revision rapida de evidencias por canal/estado con OID del remito visible.
+- `IntentoEntregaAdmin`: consulta de no entregados con OID del remito visible.
+- `EventoTrazabilidadAdmin`: auditoria de eventos con OID del remito visible.
 - `UserProfileAdmin`: administracion de roles y permisos de compartir links.
 
 ## tracking/migrations/0001_initial.py
