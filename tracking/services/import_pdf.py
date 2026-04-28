@@ -18,7 +18,7 @@ from tracking.models import EventoTrazabilidad, HojaRuta, Remito
 UUID_PATTERN_TEXT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 OID_PATTERN = re.compile(rf"(?P<oid>{UUID_PATTERN_TEXT})")
 CANAL_PATH_PATTERN = re.compile(
-    r"/conformados/(?:logistica|cliente|interno)/(?P<oid>[0-9a-fA-F-]{36})",
+    rf"/conformados/(?:logistica|cliente|interno)/(?P<oid>{UUID_PATTERN_TEXT})/?",
     re.IGNORECASE,
 )
 HEADER_PATTERNS = {
@@ -91,7 +91,7 @@ def extract_text_from_pdf(pdf_file: Any) -> str:
 def _decode_qr_from_page(page: fitz.Page) -> list[str]:
     detector = cv2.QRCodeDetector()
     decoded: list[str] = []
-    for zoom in (2, 3, 4):
+    for zoom in (2, 3, 4, 6, 8):
         pixmap = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
         image = cv2.imdecode(
             np.frombuffer(pixmap.tobytes("png"), dtype=np.uint8),
@@ -111,9 +111,16 @@ def _decode_qr_from_page(page: fitz.Page) -> list[str]:
                 decoded.append(value)
         except Exception:
             pass
+        try:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            value, _, _ = detector.detectAndDecode(gray)
+            if value:
+                decoded.append(value)
+        except Exception:
+            pass
         if decoded:
-            break
-    return decoded
+            return list(dict.fromkeys(decoded))
+    return list(dict.fromkeys(decoded))
 
 
 def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
