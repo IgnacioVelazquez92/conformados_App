@@ -26,7 +26,7 @@ HEADER_PATTERNS = {
     "transporte_tipo": re.compile(r"(?mi)^\s*(?:transporte\s*tipo|tipo\s*de\s*transporte)[ \t]*:[ \t]*(?P<value>[^\n\r]*)"),
     "flete": re.compile(r"(?mi)^\s*flete[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
     "chofer": re.compile(r"(?mi)^\s*chofer[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
-    "acompanante": re.compile(r"(?mi)^\s*acompa[nñ]ante[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
+    "acompanante": re.compile(r"(?mi)^\s*(?:acompa[nñ]ante|acomapa[nñ]ante)[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
     "transporte": re.compile(r"(?mi)^\s*(?:transporte|operador\s*log[ií]stico)[ \t]*:[ \t]*(?P<value>[^\n\r]+)"),
 }
 
@@ -89,27 +89,30 @@ def extract_text_from_pdf(pdf_file: Any) -> str:
 
 
 def _decode_qr_from_page(page: fitz.Page) -> list[str]:
-    pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-    image = cv2.imdecode(
-        np.frombuffer(pixmap.tobytes("png"), dtype=np.uint8),
-        cv2.IMREAD_COLOR,
-    )
-    if image is None:
-        return []
     detector = cv2.QRCodeDetector()
     decoded: list[str] = []
-    try:
-        success, decoded_info, _, _ = detector.detectAndDecodeMulti(image)
-        if success:
-            decoded.extend([value for value in decoded_info if value])
-    except Exception:
-        pass
-    try:
-        value, _, _ = detector.detectAndDecode(image)
-        if value:
-            decoded.append(value)
-    except Exception:
-        pass
+    for zoom in (2, 3, 4):
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        image = cv2.imdecode(
+            np.frombuffer(pixmap.tobytes("png"), dtype=np.uint8),
+            cv2.IMREAD_COLOR,
+        )
+        if image is None:
+            continue
+        try:
+            success, decoded_info, _, _ = detector.detectAndDecodeMulti(image)
+            if success:
+                decoded.extend([value for value in decoded_info if value])
+        except Exception:
+            pass
+        try:
+            value, _, _ = detector.detectAndDecode(image)
+            if value:
+                decoded.append(value)
+        except Exception:
+            pass
+        if decoded:
+            break
     return decoded
 
 
@@ -124,7 +127,6 @@ def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
             if uri:
                 candidates.append(uri)
         page_text = page.get_text("text") or ""
-        candidates.extend(OID_PATTERN.findall(page_text))
         candidates.extend(CANAL_PATH_PATTERN.findall(page_text))
         candidates.extend(_decode_qr_from_page(page))
 
@@ -138,6 +140,22 @@ def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
 
 def _normalize_value(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _merge_wrapped_uuid_lines(lines: list[str]) -> list[str]:
+    merged: list[str] = []
+    index = 0
+    while index < len(lines):
+        current = lines[index]
+        if current.endswith("-") and index + 1 < len(lines):
+            candidate = current + lines[index + 1]
+            if REMITO_OID_PATTERN.fullmatch(candidate):
+                merged.append(candidate)
+                index += 2
+                continue
+        merged.append(current)
+        index += 1
+    return merged
 
 
 def _parse_date(value: str) -> datetime.date:
@@ -162,7 +180,7 @@ def _extract_labelled_value(text: str, key: str, default: str = "") -> str:
             if key.replace("_", " ") in line.lower() and ":" in line:
                 if idx + 1 < len(lines):
                     candidate = _normalize_value(lines[idx + 1])
-                    if candidate and not re.search(r"^[a-záéíóúñ ]+\s*:\s*$", candidate, re.IGNORECASE):
+                    if candidate and ":" not in candidate and not re.search(r"^[a-záéíóúñ ]+\s*:\s*$", candidate, re.IGNORECASE):
                         return candidate
     return default
 
@@ -192,7 +210,7 @@ def _extract_date_value(text: str) -> str:
 
 
 def _extract_remitos(text: str) -> list[RemitoData]:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    lines = _merge_wrapped_uuid_lines([line.strip() for line in text.splitlines() if line.strip()])
 
     remitos: list[RemitoData] = []
     for line in lines:
@@ -248,7 +266,6 @@ def _extract_remitos(text: str) -> list[RemitoData]:
                 break
             body.append(_normalize_value(line))
 
-        body_lowered = [line.lower() for line in body]
         for idx, line in enumerate(body):
             remito_match = REMITO_PATTERN.search(line)
             if not remito_match:
@@ -258,19 +275,45 @@ def _extract_remitos(text: str) -> list[RemitoData]:
 
             cliente = ""
             subcliente = ""
-            prev = body[idx - 1] if idx - 1 >= 0 else ""
-            prevprev = body[idx - 2] if idx - 2 >= 0 else ""
+            previous_remito_idx = max(
+                (prev_idx for prev_idx in range(0, idx) if REMITO_PATTERN.search(body[prev_idx])),
+                default=-1,
+            )
+            row_start = previous_remito_idx + 1
+            date_idx = next(
+                (candidate_idx for candidate_idx in range(idx - 1, row_start - 1, -1) if DATE_PATTERN.search(body[candidate_idx])),
+                None,
+            )
+            client_lines: list[str] = []
+            if date_idx is not None:
+                client_lines = [
+                    value
+                    for value in body[date_idx + 1 : idx]
+                    if not REMITO_OID_PATTERN.fullmatch(value) and value.lower() not in headers
+                ]
 
-            if prev and not DATE_PATTERN.search(prev):
-                if prevprev and not DATE_PATTERN.search(prevprev):
-                    cliente = prevprev
-                    subcliente = prev
-                else:
-                    cliente = prev
+            if client_lines:
+                cliente = client_lines[0]
+                subcliente = " ".join(client_lines[1:])
+            else:
+                prev = body[idx - 1] if idx - 1 >= 0 else ""
+                prevprev = body[idx - 2] if idx - 2 >= 0 else ""
+
+                if prev and not DATE_PATTERN.search(prev) and not REMITO_OID_PATTERN.fullmatch(prev):
+                    if prevprev and not DATE_PATTERN.search(prevprev) and not REMITO_OID_PATTERN.fullmatch(prevprev):
+                        cliente = prevprev
+                        subcliente = prev
+                    else:
+                        cliente = prev
 
             direccion = ""
             next_line = body[idx + 1] if idx + 1 < len(body) else ""
             remito_uid = numero
+            if date_idx is not None:
+                row_prefix = body[row_start:date_idx]
+                oid_before_date = next((value for value in row_prefix if REMITO_OID_PATTERN.fullmatch(value)), "")
+                if oid_before_date:
+                    remito_uid = oid_before_date
             if next_line:
                 oid_match = REMITO_OID_PATTERN.search(next_line)
                 if oid_match:

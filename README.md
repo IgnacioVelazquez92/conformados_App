@@ -86,6 +86,7 @@ oid,nro_entrega,fecha,cliente,subcliente,remito,remito_oid,direccion,transporte,
 
 En el portal publico, el escaneo QR busca por `remito_oid`; la busqueda manual sigue usando el numero visible del remito, por ejemplo `00009-00022221`.
 Cuando el PDF de hoja de ruta incluya una columna de OID del remito, ese valor debe cargarse como `remito_oid` para asociarlo al QR fisico.
+Si el PDF corta visualmente el UUID del remito en dos lineas, el importador debe reconstruirlo antes de validar.
 
 #### Flujo:
 

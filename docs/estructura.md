@@ -179,13 +179,15 @@ Configuracion de la app `tracking`.
 Servicio de importacion y parseo de PDF de Hoja de Ruta.
 
 - `extract_text_from_pdf(...)`: obtiene texto plano del PDF.
-- `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida.
+- `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida, priorizando QR/link de hoja sobre UUID visibles de remitos.
+- `_decode_qr_from_page(...)`: intenta decodificar QR con varios niveles de resolucion para PDFs donde el QR sale chico.
 - `_extract_labelled_value(...)`: extrae cabeceras por etiqueta (nro, flete, chofer, acompanante, transporte) con fallback de linea siguiente.
 - `_extract_labelled_value(...)`: evita tomar la linea siguiente como valor cuando una etiqueta viene vacia, como `Transporte Tipo:` antes de `Peso Total:`.
+- `_merge_wrapped_uuid_lines(...)`: reconstruye UUID de remitos cortados en dos lineas por el PDF.
 - `_infer_transporte_tipo(...)`: infiere tipo de transporte cuando el PDF no trae valor junto a la etiqueta.
 - `_extract_date_value(...)`: extrae una fecha real evitando falsos positivos como encabezados.
 - `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito.
-- `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (fecha, cliente, remito, OID de remito opcional, direccion).
+- `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (`oid`, fecha, cliente, remito, direccion).
 - `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos.
 - `_validate_parsed_hoja(...)`: valida OID, fecha, cantidad minima y campos obligatorios de remitos.
 - `import_hoja_ruta_pdf(...)`: crea o actualiza `HojaRuta`, `Remito` y eventos de trazabilidad.
