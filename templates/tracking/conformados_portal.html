@@ -19,7 +19,7 @@
             <div id="remitoHelp" class="form-text">Busqueda manual por numero de remito. El QR se valida por OID interno del remito.</div>
             <div id="remitoFormatMsg" class="invalid-feedback">Formato esperado: 00009-00022221.</div>
             <input type="hidden" name="modo" value="{{ modo|default:'evidencia' }}">
-            <input type="hidden" name="origen" id="remitoSearchOrigin" value="manual">
+            <input type="hidden" name="origen" id="remitoSearchOrigin" value="{{ remito_origen|default:'manual' }}">
         </div>
         <div class="col-12 col-md-4 d-grid align-items-end">
             <button class="btn btn-primary" type="submit">Buscar remito</button>
@@ -183,6 +183,8 @@
         if (originInput) {
             originInput.value = "qr";
         }
+        input.setCustomValidity("");
+        input.classList.remove("is-invalid");
         stopScanner().then(() => form.submit());
     }
 

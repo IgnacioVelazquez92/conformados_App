@@ -459,17 +459,25 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
     )
 
     for remito_data in parsed["remitos"]:
-        remito, _ = Remito.objects.update_or_create(
-            hoja_ruta=hoja,
-            remito_uid=remito_data.remito_uid,
-            defaults={
-                "numero": remito_data.numero,
-                "cliente": remito_data.cliente,
-                "subcliente": remito_data.subcliente,
-                "direccion": remito_data.direccion,
-                "observacion": remito_data.observacion,
-            },
-        )
+        defaults = {
+            "numero": remito_data.numero,
+            "cliente": remito_data.cliente,
+            "subcliente": remito_data.subcliente,
+            "direccion": remito_data.direccion,
+            "observacion": remito_data.observacion,
+        }
+        remito = Remito.objects.filter(hoja_ruta=hoja, remito_uid=remito_data.remito_uid).first()
+        if remito is None:
+            remito = Remito.objects.filter(hoja_ruta=hoja, numero=remito_data.numero).first()
+
+        if remito is None:
+            remito = Remito.objects.create(hoja_ruta=hoja, remito_uid=remito_data.remito_uid, **defaults)
+        else:
+            remito.remito_uid = remito_data.remito_uid
+            for field, value in defaults.items():
+                setattr(remito, field, value)
+            remito.save(update_fields=["remito_uid", *defaults.keys()])
+
         EventoTrazabilidad.objects.create(
             hoja_ruta=hoja,
             remito=remito,

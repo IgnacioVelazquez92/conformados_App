@@ -191,6 +191,7 @@ Servicio de importacion y parseo de PDF de Hoja de Ruta.
 - `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (`oid`, fecha, cliente, remito, direccion).
 - `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos.
 - `_validate_parsed_hoja(...)`: valida OID, fecha, cantidad minima y campos obligatorios de remitos.
+- `_import_parsed_hoja(...)`: crea o actualiza `HojaRuta`, actualiza remitos existentes por `remito_uid` o por `numero` para incorporar OID de remito en reimportaciones.
 - `import_hoja_ruta_pdf(...)`: crea o actualiza `HojaRuta`, `Remito` y eventos de trazabilidad.
 
 ## tracking/services/import_tabular.py
@@ -382,6 +383,7 @@ Template Bootstrap responsivo con UX por pasos para canal publico:
 
 - filtro por remito (manual o escaneo QR desde camara del navegador).
 - busqueda manual por numero de remito con ayuda de formato `00009-00022221`; el QR se resuelve por OID interno del remito.
+- al escanear QR envia `origen=qr` para que el backend busque exclusivamente contra `Remito.remito_uid`.
 - guia visual para centrar el QR del remito dentro de un cuadro de escaneo.
 - escaneo con recorte central usando `jsQR` para priorizar el QR apuntado e ignorar ruido alrededor.
 - fallback de escaneo con `BarcodeDetector` cuando el recorte central no detecta codigo.
