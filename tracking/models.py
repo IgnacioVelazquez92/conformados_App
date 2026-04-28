@@ -2,6 +2,8 @@ from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -147,3 +149,18 @@ class UserProfile(models.Model):
 
     def can_share_cliente(self) -> bool:
         return self.share_cliente or self.rol in {self.Rol.VENTAS, self.Rol.JEFE}
+
+
+def _delete_file_field(file_field) -> None:
+    if file_field and file_field.name:
+        file_field.delete(save=False)
+
+
+@receiver(post_delete, sender=Evidencia)
+def delete_evidencia_file(sender, instance: Evidencia, **kwargs) -> None:
+    _delete_file_field(instance.archivo)
+
+
+@receiver(post_delete, sender=HojaRuta)
+def delete_hoja_ruta_pdf(sender, instance: HojaRuta, **kwargs) -> None:
+    _delete_file_field(instance.archivo_pdf_original)

@@ -230,6 +230,9 @@ Define entidades del dominio de trazabilidad y conformados.
 - `UserProfile`: perfil interno con rol y permisos de compartir links por canal.
 - `hoja_ruta_pdf_upload_to(...)`: construye ruta `hojas-ruta/{oid}/original.ext` para PDF.
 - `conformado_upload_to(...)`: construye ruta `conformados/{oid}/{remito_uid}/{timestamp}.ext`.
+- `_delete_file_field(...)`: elimina del storage el archivo asociado a un `FileField`.
+- `delete_evidencia_file(...)`: borra del storage la imagen/PDF de una evidencia cuando se elimina desde admin o codigo.
+- `delete_hoja_ruta_pdf(...)`: borra del storage el PDF original de una hoja cuando se elimina desde admin o codigo.
 
 ## tracking/views.py
 
