@@ -35,14 +35,9 @@ class ImportSpreadsheetForm(forms.Form):
 
 
 class EvidenciaForm(forms.Form):
-    archivo_camera = forms.FileField(
-        label="Sacar foto del conformado",
-        required=False,
-        widget=forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}),
-    )
     archivo = forms.FileField(
-        label="Subir imagen o PDF",
-        required=False,
+        label="Archivo de conformado",
+        required=True,
         widget=forms.ClearableFileInput(attrs={"accept": "image/*,.pdf,application/pdf"}),
     )
     comentario = forms.CharField(label="Comentario", required=False, widget=forms.Textarea)
@@ -63,34 +58,11 @@ class EvidenciaForm(forms.Form):
             raise forms.ValidationError(f"El archivo no puede pesar mas de {max_size_mb} MB.")
         return archivo
 
-    def clean_archivo_camera(self):
-        archivo = self.cleaned_data.get("archivo_camera")
-        if not archivo:
-            return archivo
-        name = (archivo.name or "").lower()
-        content_type = getattr(archivo, "content_type", "") or ""
-        if not any(name.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")) and not content_type.startswith("image/"):
-            raise forms.ValidationError("La foto tomada con camara debe ser una imagen.")
-        return self._validate_evidence_file(archivo)
-
     def clean_archivo(self):
         archivo = self.cleaned_data.get("archivo")
         if not archivo:
-            return archivo
+            raise forms.ValidationError("Debes cargar una foto o archivo.")
         return self._validate_evidence_file(archivo)
-
-    def clean(self):
-        cleaned_data = super().clean()
-        if self.errors:
-            return cleaned_data
-        archivo_camera = cleaned_data.get("archivo_camera")
-        archivo = cleaned_data.get("archivo")
-        if archivo_camera and archivo:
-            raise forms.ValidationError("Usa solo una opcion: sacar foto o subir archivo.")
-        if not archivo_camera and not archivo:
-            raise forms.ValidationError("Debes sacar una foto o subir una imagen/PDF.")
-        cleaned_data["archivo_final"] = archivo_camera or archivo
-        return cleaned_data
 
 
 NO_ENTREGADO_CHOICES = [

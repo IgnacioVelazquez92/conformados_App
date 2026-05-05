@@ -52,63 +52,183 @@
 {% endif %}
 
 {% if remito_seleccionado %}
-<section class="brand-card bg-white p-3 mb-4 border border-success-subtle">
-    <p class="mb-0 text-success"><strong>Remito seleccionado:</strong> {{ remito_seleccionado.numero }} - {{ remito_seleccionado.cliente }}</p>
-</section>
-
-<section class="brand-card bg-white p-4 mb-4">
-    <h2 class="h5 mb-3">2) Remito seleccionado</h2>
-    <div class="row g-3">
-        <div class="col-12 col-md-4"><strong>Remito:</strong> {{ remito_seleccionado.numero }}</div>
-        <div class="col-12 col-md-4"><strong>Cliente:</strong> {{ remito_seleccionado.cliente }}</div>
-        <div class="col-12 col-md-4"><strong>Direccion:</strong> {{ remito_seleccionado.direccion }}</div>
-    </div>
-</section>
-
-<section class="brand-card bg-white p-4 mb-4">
-    <h2 class="h5 mb-3">3) Elegir accion</h2>
-    <div class="d-flex flex-wrap gap-2 mb-3">
-        <a class="btn {% if modo == 'evidencia' %}btn-success{% else %}btn-outline-success{% endif %}" href="?remito={{ remito_query|urlencode }}&modo=evidencia">Cargar conformado</a>
-        <a class="btn {% if modo == 'no_entregado' %}btn-danger{% else %}btn-outline-danger{% endif %}" href="?remito={{ remito_query|urlencode }}&modo=no_entregado">Informar no entregado</a>
-    </div>
-
-    {% if modo == 'evidencia' %}
-        <form method="post" action="/conformados/{{ canal }}/{{ hoja.oid }}/subir/" enctype="multipart/form-data" class="row g-3" id="evidenceUploadForm" data-max-image-bytes="{{ evidencia_limits.max_image_bytes }}" data-max-pdf-bytes="{{ evidencia_limits.max_pdf_bytes }}" data-max-image-mb="{{ evidencia_limits.max_image_mb }}" data-max-pdf-mb="{{ evidencia_limits.max_pdf_mb }}">
-            {% csrf_token %}
-            <input type="hidden" name="remito_uid" value="{{ remito_seleccionado.remito_uid }}">
-            <div class="col-12">{{ evidencia_form.as_p }}</div>
-            <div class="col-12 d-none" id="evidencePreviewWrap">
-                <div class="border rounded p-3 bg-light">
-                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                        <div>
-                            <strong>Vista previa</strong>
-                            <p class="small text-secondary mb-0" id="evidencePreviewMeta"></p>
-                        </div>
-                        <button class="btn btn-outline-secondary btn-sm" type="button" id="clearEvidencePreviewBtn">Cambiar</button>
+<!-- Modal de conformado -->
+<div class="modal fade" id="conformadoModal" tabindex="-1" aria-labelledby="conformadoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header border-bottom-0 pb-0">
+                <div>
+                    <h5 class="modal-title" id="conformadoModalLabel">Cargar conformado</h5>
+                    <p class="small text-secondary mb-0" id="remitoModalSubtitle"></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Datos del remito -->
+                <div class="mb-4 p-3 bg-light rounded border">
+                    <div class="row g-2 small">
+                        <div class="col-12"><strong>Remito:</strong> <span id="remitoNum"></span></div>
+                        <div class="col-12"><strong>Cliente:</strong> <span id="remitoCliente"></span></div>
+                        <div class="col-12"><strong>Direccion:</strong> <span id="remitoDireccion"></span></div>
                     </div>
-                    <img id="evidencePreviewImage" class="evidence-upload-preview d-none" alt="Vista previa de evidencia">
-                    <div id="evidencePreviewPdf" class="alert alert-secondary d-none mb-0">PDF seleccionado para subir.</div>
-                    <p class="small text-secondary mt-2 mb-0">Verifique que el conformado se lea correctamente. Si la imagen esta borrosa, cortada o ilegible, la evidencia sera rechazada.</p>
+                </div>
+
+                <!-- Tabs para elegir acción -->
+                <ul class="nav nav-tabs mb-3" role="tablist" id="conformadoTabs">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="conformado-tab" data-bs-toggle="tab" data-bs-target="#conformado-panel" type="button" role="tab" aria-controls="conformado-panel" aria-selected="true">Cargar conformado</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="no-entregado-tab" data-bs-toggle="tab" data-bs-target="#no-entregado-panel" type="button" role="tab" aria-controls="no-entregado-panel" aria-selected="false">No entregado</button>
+                    </li>
+                </ul>
+
+                <!-- Tab content -->
+                <div class="tab-content">
+                    <!-- Cargar conformado -->
+                    <div class="tab-pane fade show active" id="conformado-panel" role="tabpanel" aria-labelledby="conformado-tab">
+                        <form method="post" action="/conformados/{{ canal }}/{{ hoja.oid }}/subir/" enctype="multipart/form-data" class="row g-3" id="evidenceUploadForm" data-max-image-bytes="{{ evidencia_limits.max_image_bytes }}" data-max-pdf-bytes="{{ evidencia_limits.max_pdf_bytes }}" data-max-image-mb="{{ evidencia_limits.max_image_mb }}" data-max-pdf-mb="{{ evidencia_limits.max_pdf_mb }}">
+                            {% csrf_token %}
+                            <input type="hidden" name="remito_uid" value="{{ remito_seleccionado.remito_uid }}">
+                            
+                            <!-- Inputs de archivo ocultos pero funcionales -->
+                            <div style="display: none;">{{ evidencia_form.as_p }}</div>
+
+                            <!-- Área de carga visual -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Paso 1: Capturar foto o archivo</label>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <button type="button" class="btn btn-outline-primary w-100" id="cameraBtn">
+                                            <span>📷 Sacar foto</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <button type="button" class="btn btn-outline-primary w-100" id="fileUploadBtn">
+                                            <span>📎 Subir archivo</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Preview de archivo -->
+                            <div class="col-12 d-none" id="evidencePreviewWrap">
+                                <div class="card border-success">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start mb-3">
+                                            <div>
+                                                <h6 class="card-title mb-1">Archivo cargado</h6>
+                                                <p class="small text-secondary mb-0" id="evidencePreviewMeta"></p>
+                                            </div>
+                                            <button class="btn btn-outline-secondary btn-sm" type="button" id="clearEvidencePreviewBtn">Cambiar</button>
+                                        </div>
+                                        <img id="evidencePreviewImage" class="evidence-upload-preview d-none w-100" alt="Vista previa de evidencia" style="max-height: 300px; object-fit: cover;">
+                                        <div id="evidencePreviewPdf" class="alert alert-success d-none mb-0">
+                                            <small>✓ PDF seleccionado correctamente</small>
+                                        </div>
+                                        <p class="small text-secondary mt-3 mb-0">
+                                            <strong>⚠️ Importante:</strong> Verifica que el conformado se lea correctamente. Si la imagen está borrosa, cortada o ilegible, será rechazada.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Error messages -->
+                            <div class="col-12">
+                                <div class="alert alert-danger d-none mb-0" id="evidencePreviewError" role="alert"></div>
+                                {% if evidencia_form.non_field_errors or evidencia_form.archivo.errors %}
+                                <div class="alert alert-danger mt-2 mb-0" role="alert">
+                                    {% for error in evidencia_form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                    {% for error in evidencia_form.archivo.errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Paso 2: Confirmación -->
+                            <div class="col-12 d-none" id="confirmationStep">
+                                <label class="form-label fw-bold">Paso 2: Confirmar envío</label>
+                                <div class="alert alert-warning mb-3">
+                                    <strong>⚠️ Advertencia importante:</strong><br>
+                                    <small>Al enviar esta foto, confirmas que:</small>
+                                    <ul class="small mb-0 mt-2">
+                                        <li>El conformado corresponde al remito {{ remito_seleccionado.numero }}</li>
+                                        <li>La imagen es legible y clara</li>
+                                        <li>Eres consciente de lo que estás cargando</li>
+                                    </ul>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="confirmCheckbox" required>
+                                    <label class="form-check-label small" for="confirmCheckbox">
+                                        Confirmo que he revisado la foto y es legible
+                                    </label>
+                                </div>
+                                {% if remito_tiene_evidencia %}
+                                <div class="alert alert-warning py-2 mb-2" role="alert">
+                                    Este remito ya tiene al menos una evidencia cargada.
+                                </div>
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="confirmDuplicateCheckbox">
+                                    <label class="form-check-label small" for="confirmDuplicateCheckbox">
+                                        Si ya existe evidencia para este remito, permito cargar una nueva.
+                                    </label>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Botones de acción -->
+                            <div class="col-12 d-grid gap-2" id="evidenceButtonsWrap">
+                                <button class="btn btn-success" type="submit" id="submitEvidenceBtn" disabled>
+                                    Enviar conformado
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- No entregado -->
+                    <div class="tab-pane fade" id="no-entregado-panel" role="tabpanel" aria-labelledby="no-entregado-tab">
+                        <form method="post" action="/conformados/{{ canal }}/{{ hoja.oid }}/no-entregado/" class="row g-3" id="noEntregadoForm">
+                            {% csrf_token %}
+                            <input type="hidden" name="remito_uid" value="{{ remito_seleccionado.remito_uid }}">
+                            <div class="col-12">{{ no_entregado_form.as_p }}</div>
+                            <div class="col-12 d-grid">
+                                <button class="btn btn-danger" type="submit">Registrar no entregado</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
-            <div class="col-12">
-                <div class="alert alert-warning d-none mb-0" id="evidencePreviewError"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de cámara para captura de foto -->
+<div class="modal fade" id="cameraModal" tabindex="-1" aria-labelledby="cameraModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cameraModalLabel">Sacar foto del conformado</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-            <div class="col-12 d-grid">
-                <button class="btn btn-success" type="submit" id="submitEvidenceBtn" disabled>Subir evidencia</button>
+            <div class="modal-body">
+                <video id="cameraVideo" style="width: 100%; transform: scaleX(-1);" playsinline autoplay muted></video>
+                <div class="mt-2 text-center text-secondary small">
+                    Centra el conformado y presiona "Capturar foto"
+                </div>
             </div>
-            </form>
-    {% else %}
-        <form method="post" action="/conformados/{{ canal }}/{{ hoja.oid }}/no-entregado/" class="row g-3">
-            {% csrf_token %}
-            <input type="hidden" name="remito_uid" value="{{ remito_seleccionado.remito_uid }}">
-            <div class="col-12">{{ no_entregado_form.as_p }}</div>
-            <div class="col-12 d-grid">
-                <button class="btn btn-outline-danger" type="submit">Registrar no entregado</button>
+            <div class="modal-footer gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="capturePhotoBtn">Capturar foto</button>
             </div>
-        </form>
-    {% endif %}
-</section>
+        </div>
+    </div>
+</div>
+
+<!-- Canvas oculto para captura de foto -->
+<canvas id="photoCanvas" style="display: none;"></canvas>
 {% endif %}
 
 <section class="brand-card bg-white p-0 overflow-hidden mb-4">
@@ -124,7 +244,7 @@
             </thead>
             <tbody>
                 {% for remito in remitos %}
-                    <tr {% if remito_seleccionado and remito.id == remito_seleccionado.id %}class="table-success"{% endif %}>
+                    <tr class="{% if remito.estado == 'pendiente' or remito.estado == 'intento_fallido' %}table-danger{% else %}table-success{% endif %}{% if remito_seleccionado and remito.id == remito_seleccionado.id %} table-active{% endif %}">
                         <td>{{ remito.numero }}</td>
                         <td>{{ remito.cliente }}</td>
                         <td>{{ remito.direccion }}</td>
@@ -368,30 +488,81 @@
     window.addEventListener("beforeunload", stopScanner);
 })();
 </script>
+
 <script>
+window.addEventListener("load", function () {
 (function () {
+    // Modal de conformado - llenar datos del remito
     const form = document.getElementById("evidenceUploadForm");
     if (!form) {
         return;
     }
 
-    const cameraInput = document.getElementById("id_archivo_camera");
+    if (typeof window.bootstrap === "undefined" || !window.bootstrap.Modal) {
+        console.error("Bootstrap Modal no esta disponible.");
+        return;
+    }
+    const bootstrapRef = window.bootstrap;
+
+    const remitoNum = document.getElementById("remitoNum");
+    const remitoCliente = document.getElementById("remitoCliente");
+    const remitoDireccion = document.getElementById("remitoDireccion");
+    const remitoModalSubtitle = document.getElementById("remitoModalSubtitle");
+
+    if (remitoNum) remitoNum.textContent = "{{ remito_seleccionado.numero }}";
+    if (remitoCliente) remitoCliente.textContent = "{{ remito_seleccionado.cliente }}";
+    if (remitoDireccion) remitoDireccion.textContent = "{{ remito_seleccionado.direccion }}";
+    if (remitoModalSubtitle) remitoModalSubtitle.textContent = "Remito {{ remito_seleccionado.numero }}";
+
+    // Elementos del formulario
     const fileInput = document.getElementById("id_archivo");
     const submitBtn = document.getElementById("submitEvidenceBtn");
-    const wrap = document.getElementById("evidencePreviewWrap");
-    const image = document.getElementById("evidencePreviewImage");
-    const pdf = document.getElementById("evidencePreviewPdf");
-    const meta = document.getElementById("evidencePreviewMeta");
-    const error = document.getElementById("evidencePreviewError");
+    const previewWrap = document.getElementById("evidencePreviewWrap");
+    const previewImage = document.getElementById("evidencePreviewImage");
+    const previewPdf = document.getElementById("evidencePreviewPdf");
+    const previewMeta = document.getElementById("evidencePreviewMeta");
+    const previewError = document.getElementById("evidencePreviewError");
     const clearBtn = document.getElementById("clearEvidencePreviewBtn");
+    const confirmCheckbox = document.getElementById("confirmCheckbox");
+    const confirmDuplicateCheckbox = document.getElementById("confirmDuplicateCheckbox");
+    const hiddenConfirmDuplicateInput = document.getElementById("id_confirmar_duplicada");
+    const confirmationStep = document.getElementById("confirmationStep");
+    const cameraBtn = document.getElementById("cameraBtn");
+    const fileUploadBtn = document.getElementById("fileUploadBtn");
+    const capturePhotoBtn = document.getElementById("capturePhotoBtn");
+    const cameraVideo = document.getElementById("cameraVideo");
+    const photoCanvas = document.getElementById("photoCanvas");
+    const conformadoModalElement = document.getElementById("conformadoModal");
+    const conformadoModal = conformadoModalElement
+        ? bootstrapRef.Modal.getOrCreateInstance(conformadoModalElement)
+        : null;
+    
+    // Inicializar modal de cámara
+    let cameraModal = null;
+    const cameraModalElement = document.getElementById("cameraModal");
+    if (cameraModalElement) {
+        cameraModal = new bootstrapRef.Modal(cameraModalElement, { backdrop: "static" });
+    }
+
+    if (conformadoModal) {
+        conformadoModal.show();
+    }
+    
     const maxImageBytes = Number(form.dataset.maxImageBytes || 0);
     const maxPdfBytes = Number(form.dataset.maxPdfBytes || 0);
     const maxImageMb = form.dataset.maxImageMb || "8";
     const maxPdfMb = form.dataset.maxPdfMb || "15";
-    let objectUrl = "";
 
+    let objectUrl = "";
+    let currentStream = null;
+
+    // Funciones auxiliares
     function selectedFile() {
-        return (cameraInput && cameraInput.files[0]) || (fileInput && fileInput.files[0]) || null;
+        return fileInput && fileInput.files[0] ? fileInput.files[0] : null;
+    }
+
+    function formatMb(bytes) {
+        return (bytes / 1024 / 1024).toFixed(1);
     }
 
     function clearPreview() {
@@ -399,45 +570,53 @@
             URL.revokeObjectURL(objectUrl);
             objectUrl = "";
         }
-        if (image) {
-            image.src = "";
-            image.classList.add("d-none");
+        if (previewImage) {
+            previewImage.src = "";
+            previewImage.classList.add("d-none");
         }
-        if (pdf) {
-            pdf.classList.add("d-none");
+        if (previewPdf) {
+            previewPdf.classList.add("d-none");
         }
-        if (wrap) {
-            wrap.classList.add("d-none");
+        if (previewWrap) {
+            previewWrap.classList.add("d-none");
         }
-        if (error) {
-            error.textContent = "";
-            error.classList.add("d-none");
+        if (confirmationStep) {
+            confirmationStep.classList.add("d-none");
         }
-        if (submitBtn) {
-            submitBtn.disabled = true;
+        if (confirmCheckbox) {
+            confirmCheckbox.checked = false;
         }
+        if (confirmDuplicateCheckbox) {
+            confirmDuplicateCheckbox.checked = false;
+        }
+        if (hiddenConfirmDuplicateInput) {
+            hiddenConfirmDuplicateInput.checked = false;
+        }
+        if (previewError) {
+            previewError.textContent = "";
+            previewError.classList.add("d-none");
+        }
+        updateSubmitButton();
     }
 
     function showError(message) {
         clearPreview();
-        if (error) {
-            error.textContent = message;
-            error.classList.remove("d-none");
+        if (previewError) {
+            previewError.innerHTML = `<strong>Error:</strong> ${message}`;
+            previewError.classList.remove("d-none");
         }
     }
 
-    function formatMb(bytes) {
-        return (bytes / 1024 / 1024).toFixed(1);
+    function updateSubmitButton() {
+        const hasFile = Boolean(selectedFile());
+        const isConfirmed = confirmCheckbox ? confirmCheckbox.checked : false;
+        submitBtn.disabled = !(hasFile && isConfirmed);
     }
 
-    function updatePreview(changedInput) {
-        const otherInput = changedInput === cameraInput ? fileInput : cameraInput;
-        if (changedInput && changedInput.files.length && otherInput) {
-            otherInput.value = "";
-        }
-
+    function updatePreview() {
         clearPreview();
         const file = selectedFile();
+        
         if (!file) {
             return;
         }
@@ -451,57 +630,207 @@
             showError("El archivo debe ser una imagen o PDF.");
             return;
         }
+
         if (maxBytes && file.size > maxBytes) {
-            showError(`El archivo pesa ${formatMb(file.size)} MB. Maximo permitido: ${maxMb} MB.`);
+            showError(`El archivo pesa ${formatMb(file.size)} MB. Máximo permitido: ${maxMb} MB.`);
             return;
         }
 
         objectUrl = URL.createObjectURL(file);
-        if (meta) {
-            meta.textContent = `${file.name} - ${formatMb(file.size)} MB`;
+        
+        if (previewMeta) {
+            previewMeta.textContent = `${file.name} • ${formatMb(file.size)} MB`;
         }
-        if (wrap) {
-            wrap.classList.remove("d-none");
+
+        if (previewWrap) {
+            previewWrap.classList.remove("d-none");
         }
-        if (isPdf && pdf) {
-            pdf.classList.remove("d-none");
+
+        if (isPdf && previewPdf) {
+            previewPdf.classList.remove("d-none");
+        } else if (isImage && previewImage) {
+            previewImage.src = objectUrl;
+            previewImage.classList.remove("d-none");
         }
-        if (isImage && image) {
-            image.src = objectUrl;
-            image.classList.remove("d-none");
+
+        if (confirmationStep) {
+            confirmationStep.classList.remove("d-none");
         }
-        if (submitBtn) {
-            submitBtn.disabled = false;
+
+        updateSubmitButton();
+    }
+
+    // Manejo de cámara
+    async function startCamera() {
+        if (!cameraModal) {
+            showError("El modal de cámara no está disponible.");
+            return;
+        }
+        if (!conformadoModal) {
+            showError("El modal principal no está disponible.");
+            return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showError("Tu navegador no soporta acceso a cámara.");
+            return;
+        }
+
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: "environment" },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+            
+            if (cameraVideo) {
+                cameraVideo.srcObject = currentStream;
+                await cameraVideo.play();
+            }
+            const openCamera = function () {
+                if (conformadoModalElement) {
+                    conformadoModalElement.removeEventListener("hidden.bs.modal", openCamera);
+                }
+                cameraModal.show();
+            };
+            if (conformadoModalElement) {
+                conformadoModalElement.addEventListener("hidden.bs.modal", openCamera, { once: true });
+            }
+            conformadoModal.hide();
+        } catch (error) {
+            console.error("Error al acceder a la cámara:", error);
+            
+            let mensaje = "No se pudo acceder a la cámara. ";
+            if (error.name === "NotAllowedError") {
+                mensaje += "Verifica los permisos del navegador.";
+            } else if (error.name === "NotFoundError") {
+                mensaje += "No hay dispositivo de cámara disponible.";
+            } else if (error.name === "NotReadableError") {
+                mensaje += "La cámara está siendo usada por otra aplicación.";
+            } else {
+                mensaje += error.message || "Error desconocido.";
+            }
+            
+            showError(mensaje);
         }
     }
 
-    if (cameraInput) {
-        cameraInput.addEventListener("change", function () {
-            updatePreview(cameraInput);
-        });
+    function stopCamera() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+        }
     }
+
+    function capturePhoto() {
+        if (!photoCanvas || !cameraVideo) {
+            showError("No se pudo capturar la foto. Intenta de nuevo.");
+            return;
+        }
+
+        try {
+            const ctx = photoCanvas.getContext("2d");
+            if (!ctx) {
+                showError("No se pudo procesar la imagen. Intenta de nuevo.");
+                return;
+            }
+
+            photoCanvas.width = cameraVideo.videoWidth;
+            photoCanvas.height = cameraVideo.videoHeight;
+            ctx.drawImage(cameraVideo, 0, 0);
+
+            photoCanvas.toBlob(function(blob) {
+                if (!blob) {
+                    showError("No se pudo crear la imagen. Intenta de nuevo.");
+                    return;
+                }
+
+                const file = new File([blob], `conformado_${Date.now()}.jpg`, { type: "image/jpeg" });
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+
+                stopCamera();
+                if (cameraModal) {
+                    cameraModal.hide();
+                }
+                if (conformadoModal) {
+                    conformadoModal.show();
+                }
+                updatePreview();
+            }, "image/jpeg", 0.9);
+        } catch (error) {
+            console.error("Error al capturar foto:", error);
+            showError("Error al capturar la foto. Intenta de nuevo.");
+        }
+    }
+
+    // Event listeners
     if (fileInput) {
-        fileInput.addEventListener("change", function () {
-            updatePreview(fileInput);
-        });
+        fileInput.addEventListener("change", updatePreview);
     }
+
     if (clearBtn) {
-        clearBtn.addEventListener("click", function () {
-            if (cameraInput) {
-                cameraInput.value = "";
-            }
-            if (fileInput) {
-                fileInput.value = "";
-            }
+        clearBtn.addEventListener("click", function() {
+            if (fileInput) fileInput.value = "";
             clearPreview();
         });
     }
-    form.addEventListener("submit", function (event) {
+
+    if (confirmCheckbox) {
+        confirmCheckbox.addEventListener("change", updateSubmitButton);
+    }
+
+    if (confirmDuplicateCheckbox && hiddenConfirmDuplicateInput) {
+        confirmDuplicateCheckbox.addEventListener("change", function () {
+            hiddenConfirmDuplicateInput.checked = confirmDuplicateCheckbox.checked;
+        });
+    }
+
+    if (cameraBtn) {
+        cameraBtn.addEventListener("click", function(e) {
+            e.preventDefault();
+            startCamera();
+        });
+    }
+
+    if (fileUploadBtn && fileInput) {
+        fileUploadBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            fileInput.click();
+        });
+    }
+
+    if (capturePhotoBtn) {
+        capturePhotoBtn.addEventListener("click", function(e) {
+            e.preventDefault();
+            capturePhoto();
+        });
+    }
+
+    form.addEventListener("submit", function(event) {
         if (!selectedFile()) {
             event.preventDefault();
-            showError("Selecciona una foto o PDF y revisa la vista previa antes de subir.");
+            showError("Debes cargar una foto o archivo.");
+        } else if (!confirmCheckbox.checked) {
+            event.preventDefault();
+            showError("Debes confirmar que has revisado la foto.");
         }
     });
+
+    // Limpiar cámara si se cierra el modal
+    if (cameraModalElement) {
+        cameraModalElement.addEventListener("hidden.bs.modal", function () {
+            stopCamera();
+            if (conformadoModal && conformadoModalElement && !conformadoModalElement.classList.contains("show")) {
+                conformadoModal.show();
+            }
+        });
+    }
 })();
+});
 </script>
 {% endblock %}

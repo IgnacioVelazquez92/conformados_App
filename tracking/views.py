@@ -740,6 +740,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
             "remito_query": remito_query,
             "remito_origen": remito_origen,
             "remito_seleccionado": remito_seleccionado,
+            "remito_tiene_evidencia": bool(remito_seleccionado and remito_seleccionado.evidencias.exists()),
             "remito_error": remito_error,
             "modo": modo,
             "evidencia_limits": _evidencia_limits_context(),
@@ -760,23 +761,23 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
         remito_query = request.POST.get("remito_uid", "").strip()
         return redirect(f"/conformados/{canal}/{oid}/?remito={remito_query}&modo=evidencia")
 
-    try:
-        _check_rate_limit(
-            key=_rate_limit_key(action="evidencia", request=request, canal=canal, oid=oid, remito_uid=remito.remito_uid),
-            limit=settings.EVIDENCIA_RATE_LIMIT_COUNT,
-            window_seconds=settings.EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS,
-        )
-    except ValueError as exc:
-        messages.error(request, str(exc))
-        return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=evidencia")
-
     if form.is_valid():
+        try:
+            _check_rate_limit(
+                key=_rate_limit_key(action="evidencia", request=request, canal=canal, oid=oid, remito_uid=remito.remito_uid),
+                limit=settings.EVIDENCIA_RATE_LIMIT_COUNT,
+                window_seconds=settings.EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS,
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=evidencia")
+
         try:
             registrar_evidencia(
                 hoja=hoja,
                 remito=remito,
                 canal=canal,
-                archivo=form.cleaned_data["archivo_final"],
+                archivo=form.cleaned_data["archivo"],
                 comentario=form.cleaned_data.get("comentario", ""),
                 origen=form.cleaned_data.get("origen", ""),
                 permitir_duplicada=bool(form.cleaned_data.get("confirmar_duplicada")),
@@ -800,6 +801,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "remito_query": remito.numero,
             "remito_origen": "manual",
             "remito_seleccionado": remito,
+            "remito_tiene_evidencia": remito.evidencias.exists(),
             "remito_error": "",
             "modo": "evidencia",
             "evidencia_limits": _evidencia_limits_context(),
@@ -820,17 +822,17 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
         remito_query = request.POST.get("remito_uid", "").strip()
         return redirect(f"/conformados/{canal}/{oid}/?remito={remito_query}&modo=no_entregado")
 
-    try:
-        _check_rate_limit(
-            key=_rate_limit_key(action="no-entregado", request=request, canal=canal, oid=oid, remito_uid=remito.remito_uid),
-            limit=settings.NO_ENTREGADO_RATE_LIMIT_COUNT,
-            window_seconds=settings.NO_ENTREGADO_RATE_LIMIT_WINDOW_SECONDS,
-        )
-    except ValueError as exc:
-        messages.error(request, str(exc))
-        return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=no_entregado")
-
     if form.is_valid():
+        try:
+            _check_rate_limit(
+                key=_rate_limit_key(action="no-entregado", request=request, canal=canal, oid=oid, remito_uid=remito.remito_uid),
+                limit=settings.NO_ENTREGADO_RATE_LIMIT_COUNT,
+                window_seconds=settings.NO_ENTREGADO_RATE_LIMIT_WINDOW_SECONDS,
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=no_entregado")
+
         try:
             registrar_intento_no_entregado(
                 hoja=hoja,
@@ -858,6 +860,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "remito_query": remito.numero,
             "remito_origen": "manual",
             "remito_seleccionado": remito,
+            "remito_tiene_evidencia": remito.evidencias.exists(),
             "remito_error": "",
             "modo": "no_entregado",
             "evidencia_limits": _evidencia_limits_context(),

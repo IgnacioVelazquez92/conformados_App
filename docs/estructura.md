@@ -271,9 +271,9 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `_find_remito_in_hoja(...)`: valida remito dentro de la hoja; busqueda manual contra `Remito.numero` y QR contra `Remito.remito_uid`.
 - `_build_evidencia_file_context(...)`: prepara URL, nombre y tipo visualizable del archivo para revision administrativa.
 - `subir_evidencia(...)`: recibe archivo de conformado y crea la evidencia.
-- `subir_evidencia(...)`: aplica rate limit antes de guardar evidencia publica.
+- `subir_evidencia(...)`: aplica rate limit solo cuando el formulario ya es valido, evitando contar intentos incompletos sin archivo.
 - `no_entregado(...)`: registra un intento de entrega no concretada.
-- `no_entregado(...)`: aplica rate limit antes de guardar intentos publicos.
+- `no_entregado(...)`: aplica rate limit solo cuando el formulario ya es valido.
 - `validar_evidencia(...)`: permite validar, observar o rechazar una evidencia.
 - `validar_evidencia(...)`: entrega contexto de visor para revisar imagenes o PDF antes de guardar la validacion.
 - `cerrar_hoja(...)`: cierra operativamente una hoja de ruta.
@@ -407,8 +407,16 @@ Template Bootstrap responsivo con UX por pasos para canal publico:
 - fallback de escaneo con `BarcodeDetector` cuando el recorte central no detecta codigo.
 - solicita camara trasera con mayor resolucion ideal y aplica enfoque/exposicion continuos o luz cuando el navegador lo soporta.
 - remito seleccionado con detalle visible.
-- formulario de evidencia con opcion rapida para sacar foto desde camara o subir imagen/PDF.
+- flujo de evidencia dentro de modal de conformado, con tabs para `cargar conformado` o `no entregado`.
+- el modal de conformado se renderiza solo cuando hay `remito_seleccionado`, evitando aperturas vacias al entrar al portal sin escanear.
+- boton `Sacar foto` que alterna del modal principal al modal de camara para evitar conflicto de dos modales abiertos en simultaneo.
+- boton `Subir archivo` que abre el input real del formulario Django (sin duplicar inputs de archivo).
+- inicializacion de modales diferida a `window.load` para asegurar que `bootstrap.bundle.min.js` ya este cargado y evitar errores `bootstrap is not defined`.
 - previsualizacion obligatoria de imagen/PDF antes de subir evidencia y validacion cliente de tamano.
+- errores del formulario de evidencia visibles dentro del modal (incluye rechazo por evidencia duplicada o archivo invalido).
+- confirmacion explicita para permitir evidencia duplicada, sincronizada con `confirmar_duplicada` del formulario.
+- el check de duplicada solo se muestra cuando el backend confirma que el remito ya tiene evidencia (`remito_tiene_evidencia`).
+- tabla de remitos con semaforo visual por estado: `table-danger` para `pendiente` o `intento_fallido`; `table-success` para remitos con avance de conformado.
 - una sola accion activa a la vez: cargar conformado o informar no entregado.
 
 ## templates/base.html
