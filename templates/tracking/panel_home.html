@@ -12,7 +12,9 @@
         <div class="d-flex flex-wrap gap-2">
             {% if can_import_pdf %}
                 <a class="btn btn-success" href="/panel/importar/pdf/">Importar PDF</a>
-                <a class="btn btn-outline-success" href="/panel/importar/excel/">Importar Excel/CSV</a>
+            {% endif %}
+            {% if can_export_excel %}
+                <a class="btn btn-outline-info" href="/panel/exportar/excel/">Exportar Excel</a>
             {% endif %}
             {% if can_review_evidence %}
                 <a class="btn btn-outline-secondary" href="/panel/evidencias/">Revisar evidencias</a>

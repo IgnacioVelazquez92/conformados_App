@@ -15,6 +15,7 @@ urlpatterns = [
     path("panel/hojas/<uuid:oid>/", views.panel_hoja_detalle, name="panel-hoja-detalle"),
     path("panel/importar/pdf/", views.panel_importar_pdf, name="panel-importar-pdf"),
     path("panel/importar/excel/", views.panel_importar_excel, name="panel-importar-excel"),
+    path("panel/exportar/excel/", views.panel_exportar_excel, name="panel-exportar-excel"),
     path("panel/evidencias/", views.panel_evidencias, name="panel-evidencias"),
     path("panel/evidencias/<int:evidencia_id>/validar/", views.validar_evidencia, name="panel-validar-evidencia"),
     path("panel/hojas/<uuid:oid>/cerrar/", views.cerrar_hoja, name="panel-cerrar-hoja"),

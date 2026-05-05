@@ -1,7 +1,10 @@
 import re
 import uuid
+from io import BytesIO
 from pathlib import Path
 
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -399,6 +402,7 @@ def panel_home(request: HttpRequest) -> HttpResponse:
             "q": q,
             "estados": HojaRuta.Estado.choices,
             "can_import_pdf": can_import_pdf(request.user),
+            "can_export_excel": can_import_pdf(request.user),
             "can_review_evidence": can_review_evidence(request.user),
             "can_manage_users": can_manage_users(request.user),
             "can_close_hoja": can_close_hoja(request.user),
@@ -574,6 +578,127 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
         "tracking/importar_excel.html",
         {"form": form, "preview": preview, "preview_token": preview_token, "preview_file_name": preview_file_name},
     )
+
+
+@login_required
+def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
+    if not can_import_pdf(request.user):
+        messages.error(request, "No tenes permisos para exportar archivos.")
+        return redirect("panel-home")
+
+    # Crear workbook
+    wb = Workbook()
+    ws_default = wb.active
+    ws_default.title = "Info"
+
+    # Obtener todas las hojas de ruta
+    hojas = HojaRuta.objects.all().prefetch_related("remitos", "evidencias").order_by("-created_at")
+
+    # Estilos
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left_alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    if not hojas.exists():
+        # Si no hay hojas, mostrar mensaje en la hoja por defecto
+        ws_default[f"A1"] = "No hay hojas de ruta cargadas"
+        ws_default[f"A1"].font = Font(bold=True, size=12)
+        ws_default.column_dimensions["A"].width = 30
+    else:
+        # Limpiar la hoja por defecto si hay datos
+        wb.remove(ws_default)
+        
+        for hoja in hojas:
+            # Crear hoja por cada HojaRuta
+            ws = wb.create_sheet(title=f"{hoja.nro_entrega[:31]}")
+
+            # Encabezado con datos de la hoja de ruta
+            row = 1
+            ws[f"A{row}"] = "HOJA DE RUTA"
+            ws[f"A{row}"].font = Font(bold=True, size=12)
+            ws.merge_cells(f"A{row}:C{row}")
+
+            row += 1
+            ws[f"A{row}"] = "OID:"
+            ws[f"B{row}"] = str(hoja.oid)
+            row += 1
+            ws[f"A{row}"] = "Nro Entrega:"
+            ws[f"B{row}"] = hoja.nro_entrega
+            row += 1
+            ws[f"A{row}"] = "Fecha:"
+            ws[f"B{row}"] = hoja.fecha.strftime("%d/%m/%Y") if hoja.fecha else "-"
+            row += 1
+            ws[f"A{row}"] = "Estado:"
+            ws[f"B{row}"] = hoja.get_estado_display()
+            row += 1
+            ws[f"A{row}"] = "Transporte Tipo:"
+            ws[f"B{row}"] = hoja.transporte_tipo or "-"
+            row += 1
+            ws[f"A{row}"] = "Flete:"
+            ws[f"B{row}"] = hoja.flete or "-"
+            row += 1
+            ws[f"A{row}"] = "Chofer:"
+            ws[f"B{row}"] = hoja.chofer or "-"
+            row += 1
+            ws[f"A{row}"] = "Acompañante:"
+            ws[f"B{row}"] = hoja.acompanante or "-"
+            row += 1
+            ws[f"A{row}"] = "Transporte:"
+            ws[f"B{row}"] = hoja.transporte or "-"
+            row += 1
+            ws[f"A{row}"] = "Creado:"
+            ws[f"B{row}"] = hoja.created_at.strftime("%d/%m/%Y %H:%M") if hoja.created_at else "-"
+
+            # Tabla de remitos
+            row += 2
+            headers = ["Remito", "OID Remito", "Cliente", "Subcliente", "Dirección", "Observación", "Estado", "Evidencias"]
+            for col, header in enumerate(headers, start=1):
+                cell = ws.cell(row=row, column=col, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_alignment
+
+            row += 1
+            for remito in hoja.remitos.all():
+                evidencias_count = remito.evidencias.count()
+                ws.cell(row=row, column=1, value=remito.numero)
+                ws.cell(row=row, column=2, value=remito.remito_uid)
+                ws.cell(row=row, column=3, value=remito.cliente)
+                ws.cell(row=row, column=4, value=remito.subcliente or "-")
+                ws.cell(row=row, column=5, value=remito.direccion)
+                ws.cell(row=row, column=6, value=remito.observacion or "-")
+                ws.cell(row=row, column=7, value=remito.get_estado_display())
+                ws.cell(row=row, column=8, value=evidencias_count)
+
+                # Aplicar estilos a las celdas
+                for col in range(1, len(headers) + 1):
+                    ws.cell(row=row, column=col).alignment = left_alignment
+
+                row += 1
+
+            # Ajustar ancho de columnas
+            ws.column_dimensions["A"].width = 18
+            ws.column_dimensions["B"].width = 25
+            ws.column_dimensions["C"].width = 20
+            ws.column_dimensions["D"].width = 20
+            ws.column_dimensions["E"].width = 25
+            ws.column_dimensions["F"].width = 20
+            ws.column_dimensions["G"].width = 18
+            ws.column_dimensions["H"].width = 12
+
+    # Generar archivo en memoria
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    # Retornar archivo para descargar
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="hojas-ruta.xlsx"'
+    return response
 
 
 def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
