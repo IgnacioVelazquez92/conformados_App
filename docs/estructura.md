@@ -192,22 +192,23 @@ Servicio de importacion y parseo de PDF de Hoja de Ruta.
 - `_infer_transporte_tipo(...)`: infiere tipo de transporte cuando el PDF no trae valor junto a la etiqueta.
 - `_extract_date_value(...)`: extrae una fecha real evitando falsos positivos como encabezados.
 - `_split_cliente_subcliente(...)`: separa lineas de cliente y subcliente, manteniendo continuaciones como parentesis o `Y ...` dentro del cliente.
-- `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito.
+- `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito; extrae fecha individual de cada remito.
 - `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (`oid`, fecha, cliente, remito, direccion).
-- `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos.
+- `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos, incluida fecha de envio por remito.
 - `_validate_parsed_hoja(...)`: valida OID, fecha, cantidad minima y campos obligatorios de remitos.
-- `_import_parsed_hoja(...)`: crea o actualiza `HojaRuta`, actualiza remitos existentes por `remito_uid` o por `numero` para incorporar OID de remito en reimportaciones.
+- `_import_parsed_hoja(...)`: crea o actualiza `HojaRuta`, actualiza remitos existentes por `remito_uid` o por `numero` para incorporar OID de remito en reimportaciones; asigna `Remito.fecha` desde datos extraidos.
 - `import_hoja_ruta_pdf(...)`: crea o actualiza `HojaRuta`, `Remito` y eventos de trazabilidad.
 
 ## tracking/services/import_tabular.py
 
 Servicio de importacion de hojas de ruta desde Excel o CSV.
 
-- `parse_csv_file(...)`: transforma CSV en estructura de hoja + remitos.
-- `parse_xlsx_file(...)`: transforma Excel en estructura de hoja + remitos.
+- `parse_csv_file(...)`: transforma CSV en estructura de hoja + remitos, incluyendo fecha individual de remito.
+- `parse_xlsx_file(...)`: transforma Excel en estructura de hoja + remitos, incluyendo fecha individual de remito.
 - `parse_tabular_file(...)`: selecciona parser CSV/XLSX segun extension para reutilizar en previsualizacion.
 - `import_tabular_file(...)`: persiste la importacion tabular usando la misma logica de dominio.
 - exige columna `remito_oid`, la valida como UUID y la guarda como `Remito.remito_uid` para filtrar por QR fisico del remito.
+- acepta columna `fecha` para asignar fecha individual a cada remito.
 
 ## tracking/services/conformados.py
 
@@ -228,7 +229,7 @@ Servicio de operaciones administrativas sobre evidencias y hojas.
 Define entidades del dominio de trazabilidad y conformados.
 
 - `HojaRuta`: representa hoja importada del ERP y su estado operativo.
-- `Remito`: representa cada documento asociado a una hoja.
+- `Remito`: representa cada documento asociado a una hoja; incluye fecha individual del remito (distinta de la fecha general de la hoja).
 - `Evidencia`: guarda archivos cargados por canal y estado de validacion.
 - `IntentoEntrega`: registra intentos no concretados y motivo.
 - `EventoTrazabilidad`: bitacora auditable de eventos del circuito.

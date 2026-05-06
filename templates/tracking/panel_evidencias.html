@@ -9,10 +9,31 @@
         <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
     </div>
     <div class="table-responsive">
+        <div class="p-3 border-bottom">
+            <form class="row g-2" method="get">
+                <div class="col-auto">
+                    <input name="remito" type="search" class="form-control" placeholder="Buscar por número de remito" value="{{ remito }}">
+                </div>
+                <div class="col-auto">
+                    <select name="estado" class="form-select">
+                        <option value="">Todos los estados</option>
+                        {% for key, label in estados %}
+                        <option value="{{ key }}" {% if estado == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button class="btn btn-primary" type="submit">Buscar</button>
+                    <a class="btn btn-outline-secondary" href="/panel/evidencias/">Limpiar</a>
+                </div>
+            </form>
+        </div>
         <table class="table table-hover mb-0">
             <thead class="table-light">
                 <tr>
                     <th>Hoja</th>
+                    <th>Fecha remito</th>
+                    <th>Fecha conformado</th>
                     <th>Remito</th>
                     <th>Canal</th>
                     <th>Estado</th>
@@ -23,6 +44,8 @@
                 {% for evidencia in evidencias %}
                 <tr>
                     <td>{{ evidencia.hoja_ruta.nro_entrega }}</td>
+                    <td>{{ evidencia.remito.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ evidencia.fecha_carga|date:"d/m/Y H:i" }}</td>
                     <td>{{ evidencia.remito.numero }}</td>
                     <td>{{ evidencia.canal }}</td>
                     <td>{{ evidencia.estado_validacion }}</td>
@@ -30,7 +53,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="text-center text-secondary py-4">No hay evidencias cargadas.</td>
+                    <td colspan="7" class="text-center text-secondary py-4">No hay evidencias cargadas.</td>
                 </tr>
                 {% endfor %}
             </tbody>

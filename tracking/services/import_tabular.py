@@ -104,6 +104,7 @@ def _build_parsed_from_rows(rows: list[dict[str, str]]) -> dict[str, Any]:
                 subcliente=row.get("subcliente", "").strip(),
                 direccion=direccion,
                 observacion=row.get("observacion", "").strip(),
+                fecha=row.get("fecha", "").strip(),
             )
         )
 

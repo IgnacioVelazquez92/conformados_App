@@ -58,6 +58,7 @@ class Remito(models.Model):
     subcliente = models.CharField(max_length=180, blank=True)
     direccion = models.CharField(max_length=250)
     observacion = models.TextField(blank=True)
+    fecha = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -39,6 +39,7 @@ class RemitoData:
     subcliente: str = ""
     direccion: str = ""
     observacion: str = ""
+    fecha: str = ""
 
 
 MIN_REMITOS_POR_HOJA = int(os.getenv("IMPORT_MIN_REMITOS", "1"))
@@ -264,6 +265,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
                 cliente=cliente,
                 direccion=direccion,
                 observacion=observacion,
+                fecha="",
             )
         )
 
@@ -351,6 +353,9 @@ def _extract_remitos(text: str) -> list[RemitoData]:
                 direccion = next_line
 
             if cliente and direccion:
+                remito_fecha = ""
+                if date_idx is not None and date_idx < len(body):
+                    remito_fecha = body[date_idx]
                 remitos.append(
                     RemitoData(
                         remito_uid=remito_uid,
@@ -359,6 +364,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
                         subcliente=subcliente,
                         direccion=direccion,
                         observacion="",
+                        fecha=remito_fecha,
                     )
                 )
 
@@ -368,7 +374,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
     fallback_number = REMITO_PATTERN.search(text)
     if fallback_number:
         numero = fallback_number.group("numero")
-        return [RemitoData(remito_uid=numero, numero=numero, cliente="", direccion="")]
+        return [RemitoData(remito_uid=numero, numero=numero, cliente="", direccion="", fecha="")]
 
     return []
 
@@ -465,6 +471,7 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
             "subcliente": remito_data.subcliente,
             "direccion": remito_data.direccion,
             "observacion": remito_data.observacion,
+            "fecha": _parse_date(remito_data.fecha) if remito_data.fecha else None,
         }
         remito = Remito.objects.filter(hoja_ruta=hoja, remito_uid=remito_data.remito_uid).first()
         if remito is None:

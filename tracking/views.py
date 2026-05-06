@@ -454,12 +454,24 @@ def panel_evidencias(request: HttpRequest) -> HttpResponse:
         messages.error(request, "No tenes permisos para revisar evidencias.")
         return redirect("panel-home")
 
-    evidencias = Evidencia.objects.select_related("hoja_ruta", "remito").order_by("-fecha_carga")[:50]
+    remito_q = request.GET.get("remito", "").strip()
+    estado = request.GET.get("estado", "").strip()
+
+    evidencias_qs = Evidencia.objects.select_related("hoja_ruta", "remito").order_by("-fecha_carga")
+    if remito_q:
+        evidencias_qs = evidencias_qs.filter(remito__numero__icontains=remito_q)
+    if estado:
+        evidencias_qs = evidencias_qs.filter(estado_validacion=estado)
+
+    evidencias = evidencias_qs[:200]
     return render(
         request,
         "tracking/panel_evidencias.html",
         {
             "evidencias": evidencias,
+            "remito": remito_q,
+            "estado": estado,
+            "estados": Evidencia.EstadoValidacion.choices,
         },
     )
 
