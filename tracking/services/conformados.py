@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
-from tracking.models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoEntrega, Remito
+from tracking.models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, Remito
 
 
 @transaction.atomic
@@ -59,3 +59,16 @@ def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str
         detalle=f"No entregado: {motivo}",
     )
     return intento
+
+
+@transaction.atomic
+def registrar_intento_acceso_portal(*, canal: str, oid: str, motivo: str, ip_address: str = "", user_agent: str = "", path: str = "", detalle: str = "") -> IntentoAccesoPortal:
+    return IntentoAccesoPortal.objects.create(
+        canal=canal,
+        oid=oid,
+        motivo=motivo,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        path=path,
+        detalle=detalle,
+    )

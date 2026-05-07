@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import date, datetime, time, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -17,9 +18,12 @@ from django.core.files.storage import default_storage
 from django.db.models import Count, Max, Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.db.models.functions import TruncDate
 
 from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
-from .models import Evidencia, EventoTrazabilidad, HojaRuta, Remito
+from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito
 from .services.authz import (
     can_close_hoja,
     can_grant_staff,
@@ -32,7 +36,8 @@ from .services.authz import (
     update_user_with_profile,
 )
 from .services.admin_ops import cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
-from .services.conformados import registrar_evidencia, registrar_intento_no_entregado
+from .services.conformados import registrar_evidencia, registrar_intento_acceso_portal, registrar_intento_no_entregado
+from .services.email_alerts import send_public_access_alert
 from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_text_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf
 from .services.import_tabular import import_tabular_file, parse_tabular_file
 
@@ -78,6 +83,27 @@ def _evidencia_limits_context() -> dict[str, int]:
         "max_image_bytes": settings.EVIDENCIA_MAX_IMAGE_SIZE_MB * 1024 * 1024,
         "max_pdf_bytes": settings.EVIDENCIA_MAX_PDF_SIZE_MB * 1024 * 1024,
     }
+
+
+def _parse_dashboard_date(value: str | None, default: date) -> date:
+    parsed = parse_date(value or "") if value else None
+    return parsed or default
+
+
+def _date_bounds(day: date) -> tuple[datetime, datetime]:
+    tz = timezone.get_current_timezone()
+    start = timezone.make_aware(datetime.combine(day, time.min), tz)
+    end = timezone.make_aware(datetime.combine(day, time.max), tz)
+    return start, end
+
+
+def _build_day_series(start_day: date, end_day: date, points: dict[str, int]) -> list[int]:
+    series: list[int] = []
+    current_day = start_day
+    while current_day <= end_day:
+        series.append(int(points.get(current_day.isoformat(), 0)))
+        current_day += timedelta(days=1)
+    return series
 
 
 def _save_import_preview_file(request: HttpRequest, uploaded_file, kind: str) -> str:
@@ -190,6 +216,11 @@ def _build_evidencia_file_context(evidencia: Evidencia) -> dict[str, str | bool]
         "is_image": extension in IMAGE_EXTENSIONS,
         "is_pdf": extension in PDF_EXTENSIONS,
     }
+
+
+def _public_probe_rate_limit_key(*, request: HttpRequest, canal: str) -> str:
+    ip = _normalize_code(_get_client_ip(request))
+    return f"probe:{ip}:{canal}"
 
 
 def _timeline_badge_class(tipo: str) -> str:
@@ -398,13 +429,69 @@ def panel_eliminar_usuario(request: HttpRequest, user_id: int) -> HttpResponse:
 def panel_home(request: HttpRequest) -> HttpResponse:
     estado = request.GET.get("estado", "").strip()
     q = request.GET.get("q", "").strip()
+    today = timezone.localdate()
+    desde = _parse_dashboard_date(request.GET.get("desde"), today - timedelta(days=29))
+    hasta = _parse_dashboard_date(request.GET.get("hasta"), today)
+    if desde > hasta:
+        desde, hasta = hasta, desde
 
-    hojas_qs = HojaRuta.objects.order_by("-fecha")
+    desde_dt, _ = _date_bounds(desde)
+    _, hasta_dt = _date_bounds(hasta)
+
+    period_labels = []
+    cursor = desde
+    while cursor <= hasta:
+        period_labels.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+
+    accesos_inexistentes = IntentoAccesoPortal.objects.filter(
+        fecha_evento__range=(desde_dt, hasta_dt),
+        motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
+    )
+
+    hojas_qs = HojaRuta.objects.annotate(
+        remitos_total=Count("remitos", distinct=True),
+        remitos_conformados=Count(
+            "remitos",
+            filter=Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
+            distinct=True,
+        ),
+        remitos_pendientes=Count(
+            "remitos",
+            filter=~Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
+            distinct=True,
+        ),
+    ).order_by("-created_at")
+    hojas_qs = hojas_qs.filter(created_at__range=(desde_dt, hasta_dt))
     if estado:
         hojas_qs = hojas_qs.filter(estado=estado)
     if q:
         hojas_qs = hojas_qs.filter(nro_entrega__icontains=q)
 
+    hojas_grafico_qs = HojaRuta.objects.filter(created_at__range=(desde_dt, hasta_dt))
+    if estado:
+        hojas_grafico_qs = hojas_grafico_qs.filter(estado=estado)
+    if q:
+        hojas_grafico_qs = hojas_grafico_qs.filter(nro_entrega__icontains=q)
+    hojas_por_dia = {
+        row["day"].isoformat(): row["total"]
+        for row in hojas_grafico_qs.annotate(day=TruncDate("created_at")).values("day").annotate(total=Count("id"))
+    }
+
+    hojas_metricas = hojas_qs
+    remitos_metricas = Remito.objects.filter(hoja_ruta__in=hojas_metricas)
+    evidencias_metricas = Evidencia.objects.filter(hoja_ruta__in=hojas_metricas)
+    hojas_cargadas_periodo = hojas_metricas.count()
+    remitos_total_periodo = remitos_metricas.count()
+    remitos_con_evidencia_periodo = evidencias_metricas.values("remito_id").distinct().count()
+    remitos_evidencia_aprobada_periodo = evidencias_metricas.filter(
+        estado_validacion=Evidencia.EstadoValidacion.VALIDADA
+    ).values("remito_id").distinct().count()
+    evidencias_pendientes_auditoria = evidencias_metricas.filter(
+        estado_validacion=Evidencia.EstadoValidacion.PENDIENTE
+    ).count()
+    hr_no_cargadas = accesos_inexistentes.count()
+    hr_no_cargadas_unicas = accesos_inexistentes.values("oid").distinct().count()
     hojas = hojas_qs[:50]
     return render(
         request,
@@ -413,12 +500,76 @@ def panel_home(request: HttpRequest) -> HttpResponse:
             "hojas": hojas,
             "estado": estado,
             "q": q,
+            "desde": desde.isoformat(),
+            "hasta": hasta.isoformat(),
             "estados": HojaRuta.Estado.choices,
+            "dashboard": {
+                "labels": period_labels,
+                "hojas_cargadas": _build_day_series(desde, hasta, hojas_por_dia),
+            },
+            "kpis": {
+                "hojas_cargadas_periodo": hojas_cargadas_periodo,
+                "remitos_total_periodo": remitos_total_periodo,
+                "remitos_con_evidencia_periodo": remitos_con_evidencia_periodo,
+                "remitos_evidencia_aprobada_periodo": remitos_evidencia_aprobada_periodo,
+                "evidencias_pendientes_auditoria": evidencias_pendientes_auditoria,
+                "hr_no_cargadas": hr_no_cargadas,
+                "hr_no_cargadas_unicas": hr_no_cargadas_unicas,
+            },
             "can_import_pdf": can_import_pdf(request.user),
             "can_export_excel": can_import_pdf(request.user),
             "can_review_evidence": can_review_evidence(request.user),
             "can_manage_users": can_manage_users(request.user),
             "can_close_hoja": can_close_hoja(request.user),
+        },
+    )
+
+
+@login_required
+def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
+    if not can_review_evidence(request.user):
+        messages.error(request, "No tenes permisos para revisar auditoria de HR no cargadas.")
+        return redirect("panel-home")
+
+    q = request.GET.get("q", "").strip()
+    canal = request.GET.get("canal", "").strip()
+    today = timezone.localdate()
+    desde = _parse_dashboard_date(request.GET.get("desde"), today - timedelta(days=29))
+    hasta = _parse_dashboard_date(request.GET.get("hasta"), today)
+    if desde > hasta:
+        desde, hasta = hasta, desde
+
+    desde_dt, _ = _date_bounds(desde)
+    _, hasta_dt = _date_bounds(hasta)
+    intentos_qs = IntentoAccesoPortal.objects.filter(
+        fecha_evento__range=(desde_dt, hasta_dt),
+        motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
+    ).order_by("-fecha_evento")
+    if q:
+        intentos_qs = intentos_qs.filter(oid__icontains=q)
+    if canal:
+        intentos_qs = intentos_qs.filter(canal=canal)
+
+    canales = (
+        IntentoAccesoPortal.objects.filter(motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE)
+        .exclude(canal="")
+        .values_list("canal", flat=True)
+        .distinct()
+        .order_by("canal")
+    )
+    intentos = intentos_qs[:200]
+    return render(
+        request,
+        "tracking/panel_auditoria_hr_no_cargadas.html",
+        {
+            "intentos": intentos,
+            "q": q,
+            "canal": canal,
+            "canales": canales,
+            "desde": desde.isoformat(),
+            "hasta": hasta.isoformat(),
+            "total_intentos": intentos_qs.count(),
+            "total_hr_unicas": intentos_qs.values("oid").distinct().count(),
         },
     )
 
@@ -838,11 +989,47 @@ def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
 
 
 def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
-    hoja = HojaRuta.objects.filter(oid=oid).first()
+    oid_text = str(oid).strip()
+
+    if not OID_PATTERN.fullmatch(oid_text):
+        try:
+            _check_rate_limit(
+                key=_public_probe_rate_limit_key(request=request, canal=canal),
+                limit=settings.PUBLIC_LINK_INVALID_RATE_LIMIT_COUNT,
+                window_seconds=settings.PUBLIC_LINK_INVALID_RATE_LIMIT_WINDOW_SECONDS,
+            )
+        except ValueError:
+            return HttpResponse("Demasiados intentos. Intenta mas tarde.", status=429)
+
+        registrar_intento_acceso_portal(
+            canal=canal,
+            oid=oid_text,
+            motivo="oid_invalido",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
+            path=request.get_full_path()[:255],
+            detalle="El valor solicitado no tiene formato de oid valido.",
+        )
+        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid_text})
+
+    hoja = HojaRuta.objects.filter(oid=oid_text).first()
     if not hoja:
-        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+        intento = registrar_intento_acceso_portal(
+            canal=canal,
+            oid=oid_text,
+            motivo="hoja_inexistente",
+            ip_address=_get_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
+            path=request.get_full_path()[:255],
+            detalle="Se intento abrir una hoja de ruta que no existe en el sistema.",
+        )
+        try:
+            send_public_access_alert(intento=intento)
+        except Exception:
+            pass
+        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid_text})
     if hoja.estado == HojaRuta.Estado.CERRADA:
-        return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
+        return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid_text})
 
     remito_query = request.GET.get("remito", "").strip()
     remito_origen = request.GET.get("origen", "manual").strip()
@@ -1042,6 +1229,10 @@ def cerrar_hoja(request: HttpRequest, oid: str) -> HttpResponse:
         return redirect("panel-home")
 
     hoja = get_object_or_404(HojaRuta, oid=oid)
+    remitos_pendientes = hoja.remitos.exclude(
+        estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)
+    ).count()
+    puede_cerrar = remitos_pendientes == 0
     if request.method == "POST":
         form = CierreHojaForm(request.POST)
         if form.is_valid():
@@ -1058,5 +1249,5 @@ def cerrar_hoja(request: HttpRequest, oid: str) -> HttpResponse:
     return render(
         request,
         "tracking/cerrar_hoja.html",
-        {"hoja": hoja, "form": form},
+        {"hoja": hoja, "form": form, "puede_cerrar": puede_cerrar, "remitos_pendientes": remitos_pendientes},
     )

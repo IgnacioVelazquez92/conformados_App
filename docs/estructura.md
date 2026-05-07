@@ -65,6 +65,9 @@ Configuracion comun de Django para todos los entornos.
 - `EVIDENCIA_MAX_IMAGE_SIZE_MB`, `EVIDENCIA_MAX_PDF_SIZE_MB`: limites de tamano para evidencias.
 - `EVIDENCIA_RATE_LIMIT_COUNT`, `EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para cargas de evidencia (default 10 por minuto).
 - `NO_ENTREGADO_RATE_LIMIT_COUNT`, `NO_ENTREGADO_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para intentos no entregados.
+- `PUBLIC_LINK_INVALID_RATE_LIMIT_COUNT`, `PUBLIC_LINK_INVALID_RATE_LIMIT_WINDOW_SECONDS`: limite suave para probes invalidos a links publicos.
+- `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`, `EMAIL_HOST_USER`, `EMAIL_FROM`, `PUBLIC_ALERT_RECIPIENTS`: configuracion SMTP para avisos.
+- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`, `GOOGLE_OAUTH_TOKEN_URL`: credenciales OAuth para autenticar el envio SMTP de alertas.
 
 ## static/vendor/bootstrap/css/bootstrap.min.css
 
@@ -79,6 +82,8 @@ Bootstrap JS local del proyecto (incluye componentes interactivos).
 Estilos globales de interfaz del proyecto.
 
 - variables visuales, cards y layout compartido.
+- dashboard operativo con encabezado sobrio, tarjetas KPI, accesos rapidos, grafico de hojas cargadas y progreso por hoja.
+- asegura contraste legible en fondos claros y mantiene componentes Bootstrap como base visual.
 - ajustes mobile-first para contenedores y tablas en pantallas chicas.
 - estilos del visor administrativo de evidencias para imagenes y PDF.
 - estilos del marco de escaneo QR con guia central y sombreado externo.
@@ -216,13 +221,20 @@ Servicio de alta de evidencias y registros de no entrega.
 
 - `registrar_evidencia(...)`: crea `Evidencia`, actualiza `Remito` y audita la carga.
 - `registrar_intento_no_entregado(...)`: crea `IntentoEntrega`, actualiza `Remito` y audita el evento.
+- `registrar_intento_acceso_portal(...)`: crea `IntentoAccesoPortal` para registrar accesos a oids invalidos o inexistentes.
+
+## tracking/services/email_alerts.py
+
+Servicio de envio de alertas por correo usando Gmail OAuth.
+
+- `send_public_access_alert(...)`: envia un email al detectar acceso a una hoja inexistente, con deduplicacion por canal+oid y destinatarios activos leidos desde `PublicAlertRecipient`.
 
 ## tracking/services/admin_ops.py
 
 Servicio de operaciones administrativas sobre evidencias y hojas.
 
 - `validar_evidencia(...)`: actualiza la validacion de la evidencia y el estado del remito.
-- `cerrar_hoja_ruta(...)`: cambia la hoja a cerrada y registra el evento.
+- `cerrar_hoja_ruta(...)`: cambia la hoja a cerrada solo si todos los remitos estan conformados u observados y luego registra el evento.
 
 ## tracking/models.py
 
@@ -232,6 +244,8 @@ Define entidades del dominio de trazabilidad y conformados.
 - `Remito`: representa cada documento asociado a una hoja; incluye fecha individual del remito (distinta de la fecha general de la hoja).
 - `Evidencia`: guarda archivos cargados por canal y estado de validacion.
 - `IntentoEntrega`: registra intentos no concretados y motivo.
+- `IntentoAccesoPortal`: registra accesos publicos invalidados o a hojas inexistentes para auditoria y alertas.
+- `PublicAlertRecipient`: destinatarios activos para alertas publicas configurables desde admin.
 - `EventoTrazabilidad`: bitacora auditable de eventos del circuito.
 - `UserProfile`: perfil interno con rol y permisos de compartir links por canal.
 - `hoja_ruta_pdf_upload_to(...)`: construye ruta `hojas-ruta/{oid}/original.ext` para PDF.
@@ -252,11 +266,13 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `panel_crear_usuario(...)`: alta de usuarios internos.
 - `panel_editar_usuario(...)`: edicion de usuarios internos.
 - `panel_eliminar_usuario(...)`: eliminacion de usuarios internos.
-- `panel_home(...)`: muestra listado basico de hojas cargadas.
+- `panel_home(...)`: muestra dashboard principal con filtros de fecha/estado/entrega, KPIs de hojas/remitos/evidencias, grafico diario de hojas cargadas y panel operativo separado.
 - `panel_hoja_detalle(...)`: muestra detalle de hoja con filtros de remitos y contexto operativo.
 - `panel_evidencias(...)`: lista evidencias recientes para revision administrativa.
+- `panel_auditoria_hr_no_cargadas(...)`: lista intentos de acceso a hojas de ruta no cargadas, con filtros por fecha, canal e identificador.
 - `panel_auditoria_remitos(...)`: lista transversal de remitos de todas las hojas con filtros de estado y conformado.
 - `panel_auditoria_remito_detalle(...)`: muestra cronologia de eventos, evidencias e intentos de un remito.
+- `conformados_portal(...)`: valida acceso publico por canal/oid y registra intentos a oids invalidos o inexistentes.
 - `panel_importar_pdf(...)`: recibe el PDF, llama al servicio de importacion y redirige al panel.
 - `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
 - `panel_importar_excel(...)`: permite previsualizar cabecera/remitos de Excel/CSV, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
@@ -279,7 +295,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `no_entregado(...)`: aplica rate limit solo cuando el formulario ya es valido.
 - `validar_evidencia(...)`: permite validar, observar o rechazar una evidencia.
 - `validar_evidencia(...)`: entrega contexto de visor para revisar imagenes o PDF antes de guardar la validacion.
-- `cerrar_hoja(...)`: cierra operativamente una hoja de ruta.
+- `cerrar_hoja(...)`: cierra operativamente una hoja de ruta solo cuando todos los remitos estan conformados u observados.
 
 ## tracking/urls.py
 
@@ -298,6 +314,7 @@ Define endpoints iniciales del modulo tracking.
 - `panel/importar/pdf/`: formulario y procesamiento de importacion de PDF.
 - `panel/evidencias/`: listado de evidencias para revision.
 - `panel/evidencias/<id>/validar/`: formulario de validacion administrativa.
+- `panel/auditoria/hr-no-cargadas/`: auditoria interna de intentos a hojas de ruta inexistentes.
 - `panel/auditoria/remitos/`: listado transversal de remitos con filtros y acceso a cronologia.
 - `panel/auditoria/remitos/<id>/`: detalle del remito con linea de tiempo y evidencias historicas.
 - `panel/hojas/<oid>/cerrar/`: confirmacion de cierre de hoja.
@@ -317,6 +334,8 @@ Configuracion del admin para operacion interna de entidades principales.
 - `RemitoAdmin`: muestra y permite buscar por numero, OID/remito_uid, cliente, direccion y hoja.
 - `EvidenciaAdmin`: revision rapida de evidencias por canal/estado con OID del remito visible.
 - `IntentoEntregaAdmin`: consulta de no entregados con OID del remito visible.
+- `IntentoAccesoPortalAdmin`: consulta de accesos publicos invalidados o a hojas inexistentes.
+- `PublicAlertRecipientAdmin`: gestion de destinatarios de alertas por correo desde admin.
 - `EventoTrazabilidadAdmin`: auditoria de eventos con OID del remito visible.
 - `UserProfileAdmin`: administracion de roles y permisos de compartir links.
 
@@ -338,9 +357,36 @@ Migracion de perfiles de usuario y roles internos.
 
 - crea `UserProfile` vinculado a `User` con rol y permisos de compartir links.
 
+## tracking/migrations/0005_intentoaccesoportal.py
+
+Migracion de auditoria de accesos publicos.
+
+- crea `IntentoAccesoPortal` para registrar oids invalidos y hojas inexistentes.
+
+## tracking/migrations/0006_publicalertrecipient.py
+
+Migracion de destinatarios dinamicos para alertas publicas.
+
+- crea `PublicAlertRecipient` para administrar correos activos desde admin.
+
 ## templates/tracking/panel_home.html
 
-Template del panel interno con estilo Bootstrap, filtros y accesos de gestion.
+Template del panel interno con dashboard de auditoria y panel operativo separados.
+
+- muestra filtros por fecha, estado y numero de entrega.
+- muestra KPIs de hojas de ruta cargadas, remitos totales, remitos con evidencia, evidencia aprobada y evidencias sin auditar.
+- separa el KPI de `HR no cargadas` como auditoria externa al circuito operativo y enlaza a su detalle.
+- renderiza con Chart.js un grafico de barras de hojas cargadas por dia.
+- agrupa accesos operativos a importacion PDF, evidencias, auditoria de remitos y usuarios.
+- mantiene tabla de hojas de ruta con filtros por numero de entrega, estado y accesos rapidos a abiertas/cerradas.
+
+## templates/tracking/panel_auditoria_hr_no_cargadas.html
+
+Template de auditoria interna para hojas de ruta no cargadas.
+
+- lista intentos de acceso a hojas inexistentes registrados como `IntentoAccesoPortal`.
+- permite filtrar por fecha, identificador solicitado y canal.
+- muestra totales de intentos y HR unicas.
 
 ## templates/tracking/panel_hoja_detalle.html
 
@@ -379,7 +425,7 @@ Template para validar, observar o rechazar una evidencia.
 
 ## templates/tracking/cerrar_hoja.html
 
-Template para confirmar el cierre operativo de una hoja.
+Template para confirmar el cierre operativo de una hoja con alerta cuando existen remitos pendientes.
 
 ## templates/tracking/importar_pdf.html
 
@@ -431,6 +477,8 @@ Layout base compartido por todos los templates.
 - carga Bootstrap CSS/JS desde `static/vendor/bootstrap/`.
 - deja `bootstrap-icons` como unica dependencia por CDN.
 - centraliza navbar responsive y estilos globales mobile-first.
+- expone bloques `extra_head` y `extra_scripts` para assets especificos de cada pagina.
+- mantiene accesos simples al panel y a evidencias desde la barra superior.
 
 ## templates/registration/login.html
 

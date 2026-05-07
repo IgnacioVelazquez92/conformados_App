@@ -1,12 +1,12 @@
 :root {
-    --brand-bg: #f4f1e8;
+    --brand-bg: #f5f7fb;
     --brand-ink: #1f2a37;
     --brand-accent: #1d6f5f;
     --brand-soft: #dbeae6;
 }
 
 body {
-    background: radial-gradient(circle at top left, #fffaf0 0%, var(--brand-bg) 45%, #edf3f7 100%);
+    background: var(--brand-bg);
     color: var(--brand-ink);
 }
 
@@ -15,14 +15,96 @@ body {
 }
 
 .brand-card {
-    border: 0;
-    border-radius: 1rem;
-    box-shadow: 0 10px 30px rgba(31, 42, 55, 0.08);
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 24px rgba(31, 42, 55, 0.06);
 }
 
 .brand-chip {
     background: var(--brand-soft);
     color: var(--brand-accent);
+}
+
+.dashboard-header {
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 1rem;
+}
+
+.quick-access-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    color: inherit;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.quick-access-card:hover {
+    border-color: rgba(29, 111, 95, 0.35);
+    box-shadow: 0 12px 28px rgba(31, 42, 55, 0.12);
+    transform: translateY(-2px);
+}
+
+.quick-access-icon {
+    align-items: center;
+    border-radius: 0.5rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    height: 2.75rem;
+    justify-content: center;
+    width: 2.75rem;
+}
+
+.kpi-card {
+    border: 0;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 24px rgba(31, 42, 55, 0.08);
+}
+
+.kpi-icon,
+.metric-icon {
+    align-items: center;
+    border-radius: 0.5rem;
+    display: inline-flex;
+    flex: 0 0 auto;
+    height: 2.75rem;
+    justify-content: center;
+    width: 2.75rem;
+}
+
+.metric-card {
+    min-height: 8.5rem;
+}
+
+.metric-card.metric-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.metric-card.metric-success {
+    border-left: 4px solid #198754;
+}
+
+.metric-card.metric-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.metric-value {
+    color: #111827;
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1;
+}
+
+.chart-frame {
+    min-height: 320px;
+}
+
+.chart-frame-sm {
+    min-height: 280px;
+}
+
+.table-progress {
+    height: 0.45rem;
+    max-width: 180px;
 }
 
 .brand-link {
@@ -32,6 +114,10 @@ body {
 
 .brand-link:hover {
     text-decoration: underline;
+}
+
+.text-white-75 {
+    color: rgba(255, 255, 255, 0.75) !important;
 }
 
 .table-scroll-mobile {
@@ -145,7 +231,11 @@ body {
     }
 
     .brand-card {
-        border-radius: 0.85rem;
+        border-radius: 0.5rem;
+    }
+
+    .chart-frame {
+        min-height: 260px;
     }
 
     .table-scroll-mobile {

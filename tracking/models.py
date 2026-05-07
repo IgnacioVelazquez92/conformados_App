@@ -109,6 +109,34 @@ class IntentoEntrega(models.Model):
     fecha_evento = models.DateTimeField(auto_now_add=True)
 
 
+class IntentoAccesoPortal(models.Model):
+    class Motivo(models.TextChoices):
+        OID_INVALIDO = "oid_invalido", "OID invalido"
+        HOJA_INEXISTENTE = "hoja_inexistente", "Hoja inexistente"
+
+    canal = models.CharField(max_length=20)
+    oid = models.CharField(max_length=64)
+    motivo = models.CharField(max_length=30, choices=Motivo.choices)
+    ip_address = models.CharField(max_length=64, blank=True)
+    user_agent = models.TextField(blank=True)
+    path = models.CharField(max_length=255, blank=True)
+    detalle = models.TextField(blank=True)
+    fecha_evento = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_evento"]
+
+
+class PublicAlertRecipient(models.Model):
+    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=180, blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.email} ({'activo' if self.active else 'inactivo'})"
+
+
 class EventoTrazabilidad(models.Model):
     class Tipo(models.TextChoices):
         IMPORTACION = "importacion", "Importacion"

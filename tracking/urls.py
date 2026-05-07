@@ -18,10 +18,11 @@ urlpatterns = [
     path("panel/exportar/excel/", views.panel_exportar_excel, name="panel-exportar-excel"),
     path("panel/evidencias/", views.panel_evidencias, name="panel-evidencias"),
     path("panel/evidencias/<int:evidencia_id>/validar/", views.validar_evidencia, name="panel-validar-evidencia"),
+    path("panel/auditoria/hr-no-cargadas/", views.panel_auditoria_hr_no_cargadas, name="panel-auditoria-hr-no-cargadas"),
     path("panel/auditoria/remitos/", views.panel_auditoria_remitos, name="panel-auditoria-remitos"),
     path("panel/auditoria/remitos/<int:remito_id>/", views.panel_auditoria_remito_detalle, name="panel-auditoria-remito-detalle"),
     path("panel/hojas/<uuid:oid>/cerrar/", views.cerrar_hoja, name="panel-cerrar-hoja"),
-    path("conformados/<str:canal>/<uuid:oid>/", views.conformados_portal, name="conformados-portal"),
     path("conformados/<str:canal>/<uuid:oid>/subir/", views.subir_evidencia, name="conformados-subir"),
     path("conformados/<str:canal>/<uuid:oid>/no-entregado/", views.no_entregado, name="conformados-no-entregado"),
+    path("conformados/<str:canal>/<path:oid>/", views.conformados_portal, name="conformados-portal"),
 ]

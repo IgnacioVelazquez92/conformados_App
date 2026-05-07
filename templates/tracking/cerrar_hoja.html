@@ -8,6 +8,12 @@
     <p class="mb-1">Hoja {{ hoja.nro_entrega }} ({{ hoja.oid }})</p>
     <p class="page-subheading">Estado actual: {{ hoja.estado }}</p>
 
+    {% if not puede_cerrar %}
+        <div class="alert alert-warning">
+            No se puede cerrar todavía. Quedan {{ remitos_pendientes }} remito(s) sin conformar u observar.
+        </div>
+    {% endif %}
+
     {% if form.errors %}
         <div class="alert alert-danger">{{ form.errors }}</div>
     {% endif %}
@@ -16,7 +22,7 @@
         {% csrf_token %}
         <div class="col-12">{{ form.as_p }}</div>
         <div class="col-12 form-actions">
-            <button class="btn btn-danger" type="submit">Cerrar hoja</button>
+            <button class="btn btn-danger" type="submit" {% if not puede_cerrar %}disabled{% endif %}>Cerrar hoja</button>
             <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
         </div>
     </form>

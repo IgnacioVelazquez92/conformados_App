@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoEntrega, Remito, UserProfile
+from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, Remito, UserProfile, PublicAlertRecipient
 
 
 class RemitoInline(admin.TabularInline):
@@ -101,6 +101,22 @@ class IntentoEntregaAdmin(admin.ModelAdmin):
     @admin.display(description="OID remito")
     def remito_uid(self, obj: IntentoEntrega) -> str:
         return obj.remito.remito_uid
+
+
+@admin.register(IntentoAccesoPortal)
+class IntentoAccesoPortalAdmin(admin.ModelAdmin):
+    list_display = ("id", "canal", "oid", "motivo", "ip_address", "fecha_evento")
+    list_filter = ("canal", "motivo", "fecha_evento")
+    search_fields = ("oid", "ip_address", "user_agent", "path", "detalle")
+    readonly_fields = ("fecha_evento",)
+
+
+@admin.register(PublicAlertRecipient)
+class PublicAlertRecipientAdmin(admin.ModelAdmin):
+    list_display = ("email", "name", "active", "created_at")
+    list_filter = ("active",)
+    search_fields = ("email", "name")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(EventoTrazabilidad)
