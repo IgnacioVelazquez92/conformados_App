@@ -13,6 +13,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.cache import cache
+from django.core.paginator import Paginator
 from django.core.files.base import File
 from django.core.files.storage import default_storage
 from django.db.models import Count, Max, Q
@@ -104,6 +105,52 @@ def _build_day_series(start_day: date, end_day: date, points: dict[str, int]) ->
         series.append(int(points.get(current_day.isoformat(), 0)))
         current_day += timedelta(days=1)
     return series
+
+
+def _hojas_filtradas_context(request: HttpRequest, *, usar_fechas: bool = True) -> dict:
+    estado = request.GET.get("estado", "").strip()
+    q = request.GET.get("q", "").strip()
+    today = timezone.localdate()
+    desde = _parse_dashboard_date(request.GET.get("desde"), today - timedelta(days=29)) if usar_fechas else None
+    hasta = _parse_dashboard_date(request.GET.get("hasta"), today) if usar_fechas else None
+    desde_dt = None
+    hasta_dt = None
+    if usar_fechas and desde and hasta:
+        if desde > hasta:
+            desde, hasta = hasta, desde
+        desde_dt, _ = _date_bounds(desde)
+        _, hasta_dt = _date_bounds(hasta)
+
+    hojas_qs = HojaRuta.objects.annotate(
+        remitos_total=Count("remitos", distinct=True),
+        remitos_conformados=Count(
+            "remitos",
+            filter=Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
+            distinct=True,
+        ),
+        remitos_pendientes=Count(
+            "remitos",
+            filter=~Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
+            distinct=True,
+        ),
+    ).order_by("-created_at")
+    if desde_dt and hasta_dt:
+        hojas_qs = hojas_qs.filter(created_at__range=(desde_dt, hasta_dt))
+    if estado:
+        hojas_qs = hojas_qs.filter(estado=estado)
+    if q:
+        hojas_qs = hojas_qs.filter(nro_entrega__icontains=q)
+
+    return {
+        "estado": estado,
+        "q": q,
+        "desde": desde,
+        "hasta": hasta,
+        "desde_dt": desde_dt,
+        "hasta_dt": hasta_dt,
+        "hojas_qs": hojas_qs,
+        "hojas": hojas_qs[:50],
+    }
 
 
 def _save_import_preview_file(request: HttpRequest, uploaded_file, kind: str) -> str:
@@ -236,18 +283,18 @@ def _timeline_badge_class(tipo: str) -> str:
 
 
 def root_redirect(request: HttpRequest) -> HttpResponse:
-    return redirect("panel-home")
+    return redirect("dashboard")
 
 
 def login_view(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
-        return redirect("panel-home")
+        return redirect("dashboard")
 
     if request.method == "POST":
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
             login(request, form.get_user())
-            return redirect("panel-home")
+            return redirect("dashboard")
     else:
         form = LoginForm(request)
     return render(request, "registration/login.html", {"form": form})
@@ -427,17 +474,37 @@ def panel_eliminar_usuario(request: HttpRequest, user_id: int) -> HttpResponse:
 
 @login_required
 def panel_home(request: HttpRequest) -> HttpResponse:
-    estado = request.GET.get("estado", "").strip()
-    q = request.GET.get("q", "").strip()
-    today = timezone.localdate()
-    desde = _parse_dashboard_date(request.GET.get("desde"), today - timedelta(days=29))
-    hasta = _parse_dashboard_date(request.GET.get("hasta"), today)
-    if desde > hasta:
-        desde, hasta = hasta, desde
+    filtros = _hojas_filtradas_context(request, usar_fechas=False)
+    paginator = Paginator(filtros["hojas_qs"], 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    return render(
+        request,
+        "tracking/panel_home.html",
+        {
+            "hojas": page_obj.object_list,
+            "page_obj": page_obj,
+            "total_hojas": paginator.count,
+            "estado": filtros["estado"],
+            "q": filtros["q"],
+            "estados": HojaRuta.Estado.choices,
+            "can_import_pdf": can_import_pdf(request.user),
+            "can_export_excel": can_import_pdf(request.user),
+            "can_review_evidence": can_review_evidence(request.user),
+            "can_manage_users": can_manage_users(request.user),
+            "can_close_hoja": can_close_hoja(request.user),
+        },
+    )
 
-    desde_dt, _ = _date_bounds(desde)
-    _, hasta_dt = _date_bounds(hasta)
 
+@login_required
+def dashboard(request: HttpRequest) -> HttpResponse:
+    filtros = _hojas_filtradas_context(request)
+    estado = filtros["estado"]
+    q = filtros["q"]
+    desde = filtros["desde"]
+    hasta = filtros["hasta"]
+    desde_dt = filtros["desde_dt"]
+    hasta_dt = filtros["hasta_dt"]
     period_labels = []
     cursor = desde
     while cursor <= hasta:
@@ -449,25 +516,6 @@ def panel_home(request: HttpRequest) -> HttpResponse:
         motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
     )
 
-    hojas_qs = HojaRuta.objects.annotate(
-        remitos_total=Count("remitos", distinct=True),
-        remitos_conformados=Count(
-            "remitos",
-            filter=Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
-            distinct=True,
-        ),
-        remitos_pendientes=Count(
-            "remitos",
-            filter=~Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
-            distinct=True,
-        ),
-    ).order_by("-created_at")
-    hojas_qs = hojas_qs.filter(created_at__range=(desde_dt, hasta_dt))
-    if estado:
-        hojas_qs = hojas_qs.filter(estado=estado)
-    if q:
-        hojas_qs = hojas_qs.filter(nro_entrega__icontains=q)
-
     hojas_grafico_qs = HojaRuta.objects.filter(created_at__range=(desde_dt, hasta_dt))
     if estado:
         hojas_grafico_qs = hojas_grafico_qs.filter(estado=estado)
@@ -478,7 +526,7 @@ def panel_home(request: HttpRequest) -> HttpResponse:
         for row in hojas_grafico_qs.annotate(day=TruncDate("created_at")).values("day").annotate(total=Count("id"))
     }
 
-    hojas_metricas = hojas_qs
+    hojas_metricas = filtros["hojas_qs"]
     remitos_metricas = Remito.objects.filter(hoja_ruta__in=hojas_metricas)
     evidencias_metricas = Evidencia.objects.filter(hoja_ruta__in=hojas_metricas)
     hojas_cargadas_periodo = hojas_metricas.count()
@@ -492,12 +540,10 @@ def panel_home(request: HttpRequest) -> HttpResponse:
     ).count()
     hr_no_cargadas = accesos_inexistentes.count()
     hr_no_cargadas_unicas = accesos_inexistentes.values("oid").distinct().count()
-    hojas = hojas_qs[:50]
     return render(
         request,
-        "tracking/panel_home.html",
+        "tracking/dashboard.html",
         {
-            "hojas": hojas,
             "estado": estado,
             "q": q,
             "desde": desde.isoformat(),
@@ -516,11 +562,6 @@ def panel_home(request: HttpRequest) -> HttpResponse:
                 "hr_no_cargadas": hr_no_cargadas,
                 "hr_no_cargadas_unicas": hr_no_cargadas_unicas,
             },
-            "can_import_pdf": can_import_pdf(request.user),
-            "can_export_excel": can_import_pdf(request.user),
-            "can_review_evidence": can_review_evidence(request.user),
-            "can_manage_users": can_manage_users(request.user),
-            "can_close_hoja": can_close_hoja(request.user),
         },
     )
 
@@ -868,7 +909,7 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
+def _panel_exportar_excel_detallado_legacy(request: HttpRequest) -> HttpResponse:
     if not can_import_pdf(request.user):
         messages.error(request, "No tenes permisos para exportar archivos.")
         return redirect("panel-home")
@@ -985,6 +1026,138 @@ def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = 'attachment; filename="hojas-ruta.xlsx"'
+    return response
+
+
+@login_required
+def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
+    if not can_import_pdf(request.user):
+        messages.error(request, "No tenes permisos para exportar archivos.")
+        return redirect("panel-home")
+
+    estado = request.GET.get("estado", "").strip()
+    q = request.GET.get("q", "").strip()
+    desde = parse_date(request.GET.get("desde", ""))
+    hasta = parse_date(request.GET.get("hasta", ""))
+    if desde and hasta and desde > hasta:
+        desde, hasta = hasta, desde
+
+    hojas = HojaRuta.objects.annotate(
+        remitos_total=Count("remitos", distinct=True),
+        remitos_con_evidencia=Count("remitos__evidencias__remito", distinct=True),
+        remitos_evidencia_aprobada=Count(
+            "remitos__evidencias__remito",
+            filter=Q(remitos__evidencias__estado_validacion=Evidencia.EstadoValidacion.VALIDADA),
+            distinct=True,
+        ),
+        evidencias_sin_auditar=Count(
+            "evidencias",
+            filter=Q(evidencias__estado_validacion=Evidencia.EstadoValidacion.PENDIENTE),
+            distinct=True,
+        ),
+        evidencias_rechazadas=Count(
+            "evidencias",
+            filter=Q(evidencias__estado_validacion=Evidencia.EstadoValidacion.RECHAZADA),
+            distinct=True,
+        ),
+    ).order_by("-created_at")
+    if desde:
+        desde_dt, _ = _date_bounds(desde)
+        hojas = hojas.filter(created_at__gte=desde_dt)
+    if hasta:
+        _, hasta_dt = _date_bounds(hasta)
+        hojas = hojas.filter(created_at__lte=hasta_dt)
+    if estado:
+        hojas = hojas.filter(estado=estado)
+    if q:
+        hojas = hojas.filter(nro_entrega__icontains=q)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Hojas de ruta"
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left_alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    ws["A1"] = "Listado de hojas de ruta filtradas"
+    ws["A1"].font = Font(bold=True, size=13)
+    desde_label = desde.strftime("%d/%m/%Y") if desde else "sin inicio"
+    hasta_label = hasta.strftime("%d/%m/%Y") if hasta else "sin fin"
+    ws["A2"] = f"Periodo de importacion: {desde_label} a {hasta_label}"
+    ws["A3"] = f"Estado: {dict(HojaRuta.Estado.choices).get(estado, 'Todos')}"
+    ws["A4"] = f"Busqueda entrega: {q or '-'}"
+    ws.merge_cells("A1:D1")
+    ws.merge_cells("A2:D2")
+    ws.merge_cells("A3:D3")
+    ws.merge_cells("A4:D4")
+
+    headers = [
+        "Nro entrega",
+        "OID hoja",
+        "Fecha hoja",
+        "Estado",
+        "Remitos totales",
+        "Remitos con evidencia",
+        "Remitos con evidencia aprobada",
+        "Evidencias sin auditar",
+        "Evidencias rechazadas",
+        "Transporte tipo",
+        "Flete",
+        "Chofer",
+        "Acompanante",
+        "Transporte",
+        "Fecha importacion",
+    ]
+    header_row = 6
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_alignment
+
+    row = header_row + 1
+    for hoja in hojas:
+        values = [
+            hoja.nro_entrega,
+            str(hoja.oid),
+            hoja.fecha.strftime("%d/%m/%Y") if hoja.fecha else "",
+            hoja.get_estado_display(),
+            hoja.remitos_total,
+            hoja.remitos_con_evidencia,
+            hoja.remitos_evidencia_aprobada,
+            hoja.evidencias_sin_auditar,
+            hoja.evidencias_rechazadas,
+            hoja.transporte_tipo,
+            hoja.flete,
+            hoja.chofer,
+            hoja.acompanante,
+            hoja.transporte,
+            timezone.localtime(hoja.created_at).strftime("%d/%m/%Y %H:%M") if hoja.created_at else "",
+        ]
+        for col, value in enumerate(values, start=1):
+            cell = ws.cell(row=row, column=col, value=value)
+            cell.alignment = left_alignment if col in {1, 2, 4, 10, 11, 12, 13, 14} else center_alignment
+        row += 1
+
+    if row == header_row + 1:
+        ws.cell(row=row, column=1, value="No hay hojas de ruta para los filtros seleccionados.")
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(headers))
+
+    widths = [18, 40, 14, 14, 16, 20, 28, 20, 20, 20, 18, 22, 22, 22, 20]
+    for index, width in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=header_row, column=index).column_letter].width = width
+    ws.freeze_panes = f"A{header_row + 1}"
+    ws.auto_filter.ref = f"A{header_row}:{ws.cell(row=max(row - 1, header_row), column=len(headers)).coordinate}"
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="listado-hojas-ruta.xlsx"'
     return response
 
 

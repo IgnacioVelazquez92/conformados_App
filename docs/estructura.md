@@ -266,7 +266,8 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `panel_crear_usuario(...)`: alta de usuarios internos.
 - `panel_editar_usuario(...)`: edicion de usuarios internos.
 - `panel_eliminar_usuario(...)`: eliminacion de usuarios internos.
-- `panel_home(...)`: muestra dashboard principal con filtros de fecha/estado/entrega, KPIs de hojas/remitos/evidencias, grafico diario de hojas cargadas y panel operativo separado.
+- `dashboard(...)`: muestra dashboard principal en `/dashboard/` con filtros de fecha/estado/entrega, KPIs de hojas/remitos/evidencias y grafico diario de hojas cargadas.
+- `panel_home(...)`: muestra panel operativo en `/panel/` con accesos de gestion, listado paginado de hojas de ruta y filtros por entrega/estado sin filtro de fecha implicito.
 - `panel_hoja_detalle(...)`: muestra detalle de hoja con filtros de remitos y contexto operativo.
 - `panel_evidencias(...)`: lista evidencias recientes para revision administrativa.
 - `panel_auditoria_hr_no_cargadas(...)`: lista intentos de acceso a hojas de ruta no cargadas, con filtros por fecha, canal e identificador.
@@ -276,6 +277,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `panel_importar_pdf(...)`: recibe el PDF, llama al servicio de importacion y redirige al panel.
 - `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
 - `panel_importar_excel(...)`: permite previsualizar cabecera/remitos de Excel/CSV, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
+- `panel_exportar_excel(...)`: exporta en una sola planilla el listado de hojas de ruta filtradas por estado, numero de entrega y fechas opcionales elegidas al exportar, con conteos de remitos/evidencias para comparacion operativa.
 - `_save_import_preview_file(...)`: guarda un archivo previsualizado en storage bajo `import-preview/{usuario}/{token}/`.
 - `_open_import_preview_file(...)`: reabre el archivo temporal asociado al token guardado en sesion.
 - `_delete_import_preview_file(...)`: elimina el archivo temporal tras una importacion exitosa.
@@ -304,7 +306,8 @@ Define endpoints iniciales del modulo tracking.
 - ``: redireccion raiz hacia panel.
 - `accounts/login/`: login del panel interno.
 - `accounts/logout/`: cierre de sesion.
-- `panel/`: entrada de panel interno.
+- `dashboard/`: dashboard interno de auditoria y KPIs.
+- `panel/`: panel operativo interno.
 - `panel/permisos/`: matriz de permisos por rol.
 - `panel/usuarios/`: listado de usuarios internos.
 - `panel/usuarios/nuevo/`: alta de usuario interno con rol.
@@ -312,6 +315,7 @@ Define endpoints iniciales del modulo tracking.
 - `panel/usuarios/<id>/eliminar/`: eliminacion de usuario interno.
 - `panel/hojas/<oid>/`: detalle de hoja con filtros.
 - `panel/importar/pdf/`: formulario y procesamiento de importacion de PDF.
+- `panel/exportar/excel/`: descarga Excel del listado de hojas de ruta aplicando los filtros vigentes.
 - `panel/evidencias/`: listado de evidencias para revision.
 - `panel/evidencias/<id>/validar/`: formulario de validacion administrativa.
 - `panel/auditoria/hr-no-cargadas/`: auditoria interna de intentos a hojas de ruta inexistentes.
@@ -371,14 +375,21 @@ Migracion de destinatarios dinamicos para alertas publicas.
 
 ## templates/tracking/panel_home.html
 
-Template del panel interno con dashboard de auditoria y panel operativo separados.
+Template del panel operativo interno.
+
+- agrupa accesos operativos a importacion PDF, evidencias, auditoria de remitos, HR no cargadas y usuarios.
+- mantiene tabla de hojas de ruta paginada de a 20, con busqueda por numero de entrega y accesos rapidos a todas/abiertas/cerradas.
+- permite exportar el listado filtrado a Excel con fechas opcionales solo en el formulario de exportacion.
+- enlaza al dashboard para lectura de KPIs sin mezclar responsabilidades operativas.
+
+## templates/tracking/dashboard.html
+
+Template del dashboard interno de auditoria.
 
 - muestra filtros por fecha, estado y numero de entrega.
 - muestra KPIs de hojas de ruta cargadas, remitos totales, remitos con evidencia, evidencia aprobada y evidencias sin auditar.
 - separa el KPI de `HR no cargadas` como auditoria externa al circuito operativo y enlaza a su detalle.
 - renderiza con Chart.js un grafico de barras de hojas cargadas por dia.
-- agrupa accesos operativos a importacion PDF, evidencias, auditoria de remitos y usuarios.
-- mantiene tabla de hojas de ruta con filtros por numero de entrega, estado y accesos rapidos a abiertas/cerradas.
 
 ## templates/tracking/panel_auditoria_hr_no_cargadas.html
 

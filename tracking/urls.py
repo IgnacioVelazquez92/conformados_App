@@ -6,6 +6,7 @@ urlpatterns = [
     path("", views.root_redirect, name="root"),
     path("accounts/login/", views.login_view, name="login"),
     path("accounts/logout/", views.logout_view, name="logout"),
+    path("dashboard/", views.dashboard, name="dashboard"),
     path("panel/", views.panel_home, name="panel-home"),
     path("panel/permisos/", views.panel_permisos, name="panel-permisos"),
     path("panel/usuarios/", views.panel_usuarios, name="panel-usuarios"),

@@ -1,24 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard de conformados{% endblock %}
-
-{% block extra_head %}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-{% endblock %}
+{% block title %}Panel operativo{% endblock %}
 
 {% block content %}
-{{ dashboard|json_script:"dashboard-data" }}
-
 <section class="dashboard-header mb-4">
     <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
         <div>
-            <div class="text-uppercase text-secondary fw-semibold small mb-2">Auditoria de conformados</div>
-            <h1 class="h2 fw-bold mb-2">Dashboard operativo</h1>
-            <p class="text-secondary mb-0">Controla hojas cargadas, remitos importados, evidencias recibidas y validaciones pendientes.</p>
+            <div class="text-uppercase text-secondary fw-semibold small mb-2">Gestion interna</div>
+            <h1 class="h2 fw-bold mb-2">Panel operativo</h1>
+            <p class="text-secondary mb-0">Carga de hojas, revision de evidencias, auditoria operativa y administracion de usuarios.</p>
         </div>
         <div class="d-flex flex-wrap align-items-start gap-2">
-            <a class="btn btn-outline-dark" href="#panel-operativo">
-                <i class="bi bi-grid-3x3-gap me-1"></i> Panel operativo
+            <a class="btn btn-outline-dark" href="/dashboard/">
+                <i class="bi bi-speedometer2 me-1"></i> Ver dashboard
             </a>
             <a class="btn btn-dark" href="/panel/auditoria/remitos/">
                 <i class="bi bi-search me-1"></i> Auditar remitos
@@ -27,175 +21,60 @@
     </div>
 </section>
 
-<section class="brand-card bg-white p-3 p-lg-4 mb-4">
-    <form class="row g-3 align-items-end" method="get" aria-label="Filtros del dashboard">
-        <div class="col-6 col-lg-2">
-            <label class="form-label small fw-semibold text-secondary" for="desde">Desde</label>
-            <input id="desde" type="date" class="form-control" name="desde" value="{{ desde }}" />
-        </div>
-        <div class="col-6 col-lg-2">
-            <label class="form-label small fw-semibold text-secondary" for="hasta">Hasta</label>
-            <input id="hasta" type="date" class="form-control" name="hasta" value="{{ hasta }}" />
-        </div>
-        <div class="col-12 col-lg-3">
-            <label class="form-label small fw-semibold text-secondary" for="estado">Estado de hoja</label>
-            <select id="estado" class="form-select" name="estado">
-                <option value="">Todos los estados</option>
-                {% for value, label in estados %}
-                    <option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-12 col-lg-3">
-            <label class="form-label small fw-semibold text-secondary" for="q">Entrega</label>
-            <input id="q" type="text" class="form-control" name="q" placeholder="Buscar nro de entrega" value="{{ q }}" />
-        </div>
-        <div class="col-12 col-lg-2 d-grid d-lg-flex gap-2">
-            <button class="btn btn-dark" type="submit">Filtrar</button>
-            <a class="btn btn-outline-secondary" href="/panel/">Limpiar</a>
-        </div>
-    </form>
-</section>
-
 <section class="row g-3 mb-4">
-    <div class="col-6 col-xl-3">
-        <div class="brand-card metric-card bg-white p-3 h-100">
-            <div class="d-flex justify-content-between gap-2">
-                <div>
-                    <div class="text-secondary small">Hojas de ruta cargadas</div>
-                    <div class="metric-value">{{ kpis.hojas_cargadas_periodo }}</div>
-                </div>
-                <span class="metric-icon text-primary bg-primary-subtle"><i class="bi bi-inboxes"></i></span>
-            </div>
-            <div class="small text-secondary mt-2">Dentro del periodo y estado seleccionados.</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="brand-card metric-card bg-white p-3 h-100">
-            <div class="d-flex justify-content-between gap-2">
-                <div>
-                    <div class="text-secondary small">Remitos totales</div>
-                    <div class="metric-value">{{ kpis.remitos_total_periodo }}</div>
-                </div>
-                <span class="metric-icon text-dark bg-light"><i class="bi bi-files"></i></span>
-            </div>
-            <div class="small text-secondary mt-2">Remitos importados en esas hojas.</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="brand-card metric-card bg-white p-3 h-100">
-            <div class="d-flex justify-content-between gap-2">
-                <div>
-                    <div class="text-secondary small">Remitos con evidencia</div>
-                    <div class="metric-value">{{ kpis.remitos_con_evidencia_periodo }}</div>
-                </div>
-                <span class="metric-icon text-info bg-info-subtle"><i class="bi bi-paperclip"></i></span>
-            </div>
-            <div class="small text-secondary mt-2">Al menos una evidencia subida.</div>
-        </div>
-    </div>
-    <div class="col-6 col-xl-3">
-        <div class="brand-card metric-card bg-white p-3 h-100">
-            <div class="d-flex justify-content-between gap-2">
-                <div>
-                    <div class="text-secondary small">Evidencia aprobada</div>
-                    <div class="metric-value">{{ kpis.remitos_evidencia_aprobada_periodo }}</div>
-                </div>
-                <span class="metric-icon text-success bg-success-subtle"><i class="bi bi-check2-circle"></i></span>
-            </div>
-            <div class="small text-secondary mt-2">Remitos con evidencia validada.</div>
-        </div>
-    </div>
-</section>
-
-<section class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
-        <a class="brand-card metric-card metric-warning bg-white p-3 h-100 text-decoration-none d-flex justify-content-between gap-3" href="/panel/evidencias/?estado=pendiente_revision">
+    {% if can_import_pdf %}
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/importar/pdf/">
             <div>
-                <div class="text-secondary small">Evidencias sin auditar</div>
-                <div class="metric-value">{{ kpis.evidencias_pendientes_auditoria }}</div>
-                <div class="small text-secondary mt-2">Subidas y pendientes de validar, observar o rechazar.</div>
+                <div class="fw-semibold text-dark">Importar PDF</div>
+                <div class="small text-secondary">Cargar hoja emitida por ERP.</div>
             </div>
-            <span class="metric-icon text-warning bg-warning-subtle"><i class="bi bi-hourglass-split"></i></span>
+            <span class="quick-access-icon bg-primary-subtle text-primary"><i class="bi bi-filetype-pdf"></i></span>
         </a>
     </div>
-    <div class="col-12 col-lg-6">
-        <a class="brand-card metric-card metric-danger bg-white p-3 h-100 text-decoration-none d-flex justify-content-between gap-3" href="/panel/auditoria/hr-no-cargadas/?desde={{ desde }}&hasta={{ hasta }}">
+    {% endif %}
+    {% if can_review_evidence %}
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/evidencias/">
             <div>
-                <div class="text-secondary small">HR no cargadas</div>
-                <div class="metric-value">{{ kpis.hr_no_cargadas }}</div>
-                <div class="small text-secondary mt-2">{{ kpis.hr_no_cargadas_unicas }} HR unicas intentaron abrirse sin existir en el sistema.</div>
+                <div class="fw-semibold text-dark">Revisar evidencias</div>
+                <div class="small text-secondary">Validar, observar o rechazar.</div>
             </div>
-            <span class="metric-icon text-danger bg-danger-subtle"><i class="bi bi-shield-exclamation"></i></span>
+            <span class="quick-access-icon bg-success-subtle text-success"><i class="bi bi-images"></i></span>
         </a>
     </div>
-</section>
-
-<section class="brand-card bg-white p-3 p-lg-4 mb-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div>
-            <h2 class="h5 mb-1">Hojas cargadas por dia</h2>
-            <p class="text-secondary mb-0">Cantidad de hojas de ruta importadas en el periodo seleccionado.</p>
-        </div>
-        <span class="badge text-bg-light">{{ desde }} a {{ hasta }}</span>
+    {% endif %}
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/remitos/">
+            <div>
+                <div class="fw-semibold text-dark">Auditoria de remitos</div>
+                <div class="small text-secondary">Buscar pendientes y cronologia.</div>
+            </div>
+            <span class="quick-access-icon bg-warning-subtle text-warning"><i class="bi bi-clipboard-data"></i></span>
+        </a>
     </div>
-    <div class="chart-frame">
-        <canvas id="dashboardChart"></canvas>
+    {% if can_review_evidence %}
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/hr-no-cargadas/">
+            <div>
+                <div class="fw-semibold text-dark">HR no cargadas</div>
+                <div class="small text-secondary">Auditar accesos a hojas inexistentes.</div>
+            </div>
+            <span class="quick-access-icon bg-danger-subtle text-danger"><i class="bi bi-shield-exclamation"></i></span>
+        </a>
     </div>
-</section>
-
-<section id="panel-operativo" class="mb-4">
-    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
-        <div>
-            <div class="text-uppercase text-secondary fw-semibold small mb-2">Gestion interna</div>
-            <h2 class="h4 fw-bold mb-1">Panel operativo</h2>
-            <p class="text-secondary mb-0">Accesos separados del dashboard para carga, revision, auditoria y usuarios.</p>
-        </div>
+    {% endif %}
+    {% if can_manage_users %}
+    <div class="col-12 col-md-6 col-xl-3">
+        <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/usuarios/">
+            <div>
+                <div class="fw-semibold text-dark">Usuarios</div>
+                <div class="small text-secondary">Roles, permisos y accesos internos.</div>
+            </div>
+            <span class="quick-access-icon bg-secondary-subtle text-secondary"><i class="bi bi-people"></i></span>
+        </a>
     </div>
-    <div class="row g-3">
-        {% if can_import_pdf %}
-        <div class="col-12 col-md-6 col-xl-3">
-            <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/importar/pdf/">
-                <div>
-                    <div class="fw-semibold text-dark">Importar PDF</div>
-                    <div class="small text-secondary">Cargar hoja emitida por ERP.</div>
-                </div>
-                <span class="quick-access-icon bg-primary-subtle text-primary"><i class="bi bi-filetype-pdf"></i></span>
-            </a>
-        </div>
-        {% endif %}
-        {% if can_review_evidence %}
-        <div class="col-12 col-md-6 col-xl-3">
-            <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/evidencias/">
-                <div>
-                    <div class="fw-semibold text-dark">Revisar evidencias</div>
-                    <div class="small text-secondary">Validar, observar o rechazar.</div>
-                </div>
-                <span class="quick-access-icon bg-success-subtle text-success"><i class="bi bi-images"></i></span>
-            </a>
-        </div>
-        {% endif %}
-        <div class="col-12 col-md-6 col-xl-3">
-            <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/remitos/">
-                <div>
-                    <div class="fw-semibold text-dark">Auditoria de remitos</div>
-                    <div class="small text-secondary">Buscar pendientes y cronologia.</div>
-                </div>
-                <span class="quick-access-icon bg-warning-subtle text-warning"><i class="bi bi-clipboard-data"></i></span>
-            </a>
-        </div>
-        {% if can_manage_users %}
-        <div class="col-12 col-md-6 col-xl-3">
-            <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/usuarios/">
-                <div>
-                    <div class="fw-semibold text-dark">Usuarios</div>
-                    <div class="small text-secondary">Roles y permisos internos.</div>
-                </div>
-                <span class="quick-access-icon bg-secondary-subtle text-secondary"><i class="bi bi-people"></i></span>
-            </a>
-        </div>
-        {% endif %}
-    </div>
+    {% endif %}
 </section>
 
 <section class="brand-card bg-white p-0 overflow-hidden mb-4">
@@ -204,36 +83,54 @@
             <h2 class="h5 mb-1">Hojas de ruta</h2>
             <p class="text-secondary mb-0">Listado operativo con avance de evidencias por hoja.</p>
         </div>
-        <span class="badge text-bg-light">{{ hojas|length }} registros visibles</span>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="badge text-bg-light">{{ total_hojas }} registros</span>
+        </div>
     </div>
     <form class="row g-2 align-items-end px-3 px-lg-4 pb-3" method="get" aria-label="Filtros de hojas de ruta">
-        <input type="hidden" name="desde" value="{{ desde }}" />
-        <input type="hidden" name="hasta" value="{{ hasta }}" />
-        <div class="col-12 col-lg-5">
+        <div class="col-12 col-lg-7">
             <label class="form-label small fw-semibold text-secondary" for="tabla-q">Numero de entrega</label>
             <input id="tabla-q" type="text" class="form-control" name="q" placeholder="Ej: ER0010011838" value="{{ q }}" />
         </div>
-        <div class="col-12 col-lg-4">
-            <label class="form-label small fw-semibold text-secondary" for="tabla-estado">Estado</label>
-            <select id="tabla-estado" class="form-select" name="estado">
-                <option value="">Todas</option>
-                {% for value, label in estados %}
-                    <option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-12 col-lg-3 d-grid d-lg-flex gap-2">
+        <div class="col-12 col-lg-5 d-grid d-lg-flex gap-2">
+            {% if estado %}
+                <input type="hidden" name="estado" value="{{ estado }}" />
+            {% endif %}
             <button class="btn btn-dark" type="submit">Buscar</button>
-            <a class="btn btn-outline-secondary" href="/panel/?desde={{ desde }}&hasta={{ hasta }}">Ver todas</a>
+            <a class="btn btn-outline-secondary" href="/panel/">Ver todas</a>
         </div>
         <div class="col-12">
             <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtros rapidos por estado">
-                <a class="btn {% if not estado %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/panel/?desde={{ desde }}&hasta={{ hasta }}{% if q %}&q={{ q|urlencode }}{% endif %}">Todas</a>
-                <a class="btn {% if estado == 'abierta' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/panel/?desde={{ desde }}&hasta={{ hasta }}&estado=abierta{% if q %}&q={{ q|urlencode }}{% endif %}">Abiertas</a>
-                <a class="btn {% if estado == 'cerrada' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/panel/?desde={{ desde }}&hasta={{ hasta }}&estado=cerrada{% if q %}&q={{ q|urlencode }}{% endif %}">Cerradas</a>
+                <a class="btn {% if not estado %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/panel/{% if q %}?q={{ q|urlencode }}{% endif %}">Todas</a>
+                <a class="btn {% if estado == 'abierta' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/panel/?estado=abierta{% if q %}&q={{ q|urlencode }}{% endif %}">Abiertas</a>
+                <a class="btn {% if estado == 'cerrada' %}btn-dark{% else %}btn-outline-dark{% endif %}" href="/panel/?estado=cerrada{% if q %}&q={{ q|urlencode }}{% endif %}">Cerradas</a>
             </div>
         </div>
     </form>
+    {% if can_export_excel %}
+    <form class="row g-2 align-items-end px-3 px-lg-4 pb-3 border-top pt-3" method="get" action="/panel/exportar/excel/" aria-label="Exportar hojas de ruta">
+        {% if estado %}
+            <input type="hidden" name="estado" value="{{ estado }}" />
+        {% endif %}
+        {% if q %}
+            <input type="hidden" name="q" value="{{ q }}" />
+        {% endif %}
+        <div class="col-6 col-lg-3">
+            <label class="form-label small fw-semibold text-secondary" for="export-desde">Exportar desde</label>
+            <input id="export-desde" type="date" class="form-control" name="desde" />
+        </div>
+        <div class="col-6 col-lg-3">
+            <label class="form-label small fw-semibold text-secondary" for="export-hasta">Exportar hasta</label>
+            <input id="export-hasta" type="date" class="form-control" name="hasta" />
+        </div>
+        <div class="col-12 col-lg-6 d-grid d-lg-flex align-items-end gap-2">
+            <button class="btn btn-outline-success" type="submit">
+                <i class="bi bi-file-earmark-excel me-1"></i> Exportar listado
+            </button>
+            <div class="small text-secondary">Respeta busqueda y estado; las fechas son opcionales.</div>
+        </div>
+    </form>
+    {% endif %}
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
@@ -278,43 +175,31 @@
             </tbody>
         </table>
     </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 p-3 border-top">
+        <div class="small text-secondary">
+            Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}. Mostrando hasta 20 hojas por pagina.
+        </div>
+        <nav aria-label="Paginacion de hojas de ruta">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+                    {% if page_obj.has_previous %}
+                        <a class="page-link" href="/panel/?page={{ page_obj.previous_page_number }}{% if estado %}&estado={{ estado|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Anterior</a>
+                    {% else %}
+                        <span class="page-link">Anterior</span>
+                    {% endif %}
+                </li>
+                <li class="page-item disabled"><span class="page-link">{{ page_obj.number }}</span></li>
+                <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+                    {% if page_obj.has_next %}
+                        <a class="page-link" href="/panel/?page={{ page_obj.next_page_number }}{% if estado %}&estado={{ estado|urlencode }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">Siguiente</a>
+                    {% else %}
+                        <span class="page-link">Siguiente</span>
+                    {% endif %}
+                </li>
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </section>
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    const dataElement = document.getElementById("dashboard-data");
-    const canvas = document.getElementById("dashboardChart");
-    if (!dataElement || !canvas || typeof Chart === "undefined") {
-        return;
-    }
-
-    const payload = JSON.parse(dataElement.textContent);
-    new Chart(canvas, {
-        type: "bar",
-        data: {
-            labels: payload.labels,
-            datasets: [
-                {
-                    label: "Hojas cargadas",
-                    data: payload.hojas_cargadas,
-                    borderColor: "#0d6efd",
-                    backgroundColor: "rgba(13, 110, 253, 0.72)",
-                    borderRadius: 6,
-                },
-            ],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: "rgba(33, 37, 41, 0.08)" } },
-                x: { grid: { display: false } },
-            },
-        },
-    });
-});
-</script>
 {% endblock %}
