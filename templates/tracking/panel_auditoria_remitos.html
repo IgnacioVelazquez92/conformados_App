@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría de remitos{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-0 overflow-hidden">
+    <div class="p-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h1 class="h4 mb-1">Auditoría de remitos</h1>
+            <p class="text-secondary mb-0">Todos los remitos de todas las hojas, con y sin conformado.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
+    </div>
+
+    <div class="p-3 border-bottom bg-light">
+        <form class="row g-2 align-items-end" method="get">
+            <div class="col-12 col-md-4">
+                <label class="form-label small text-secondary mb-1">Buscar</label>
+                <input name="q" type="search" class="form-control" placeholder="Remito, cliente, OID u hoja" value="{{ q }}">
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label small text-secondary mb-1">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">Todos</option>
+                    {% for value, label in estados %}
+                        <option value="{{ value }}" {% if estado == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label small text-secondary mb-1">Conformado</label>
+                <select name="conformado" class="form-select">
+                    {% for value, label in conformados %}
+                        <option value="{{ value }}" {% if conformado == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label small text-secondary mb-1">Hoja</label>
+                <input name="hoja" type="search" class="form-control" placeholder="Nro entrega" value="{{ hoja }}">
+            </div>
+            <div class="col-12 col-md-2 d-grid gap-2 d-md-flex">
+                <button class="btn btn-primary flex-fill" type="submit">Filtrar</button>
+                <a class="btn btn-outline-secondary flex-fill" href="/panel/auditoria/remitos/">Limpiar</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Hoja</th>
+                    <th>Fecha remito</th>
+                    <th>Fecha conformado</th>
+                    <th>Cliente</th>
+                    <th>Remito</th>
+                    <th>Estado</th>
+                    <th>Conformado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for remito in remitos %}
+                <tr>
+                    <td>{{ remito.hoja_ruta.nro_entrega }}</td>
+                    <td>{{ remito.fecha|date:"d/m/Y"|default:"-" }}</td>
+                    <td>{{ remito.fecha_ultima_evidencia|date:"d/m/Y H:i"|default:"-" }}</td>
+                    <td>
+                        <div class="fw-semibold">{{ remito.cliente }}</div>
+                        <div class="text-secondary small">{{ remito.direccion }}</div>
+                    </td>
+                    <td>{{ remito.numero }}</td>
+                    <td><span class="badge text-bg-secondary">{{ remito.get_estado_display }}</span></td>
+                    <td>
+                        {% if remito.evidencias_total %}
+                            <span class="badge text-bg-success">Sí</span>
+                            <div class="text-secondary small">{{ remito.evidencias_total }} evidencia{{ remito.evidencias_total|pluralize }}</div>
+                        {% else %}
+                            <span class="badge text-bg-warning text-dark">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="btn btn-sm btn-dark" href="/panel/auditoria/remitos/{{ remito.id }}/">Ver detalles</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-secondary py-4">No hay remitos para esos filtros.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

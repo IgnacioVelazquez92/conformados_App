@@ -63,7 +63,7 @@ Configuracion comun de Django para todos los entornos.
 - `STATICFILES_DIRS`: incluye `static/` del proyecto para servir assets frontend versionados localmente.
 - usa WhiteNoise middleware para servir archivos estaticos en produccion.
 - `EVIDENCIA_MAX_IMAGE_SIZE_MB`, `EVIDENCIA_MAX_PDF_SIZE_MB`: limites de tamano para evidencias.
-- `EVIDENCIA_RATE_LIMIT_COUNT`, `EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para cargas de evidencia.
+- `EVIDENCIA_RATE_LIMIT_COUNT`, `EVIDENCIA_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para cargas de evidencia (default 10 por minuto).
 - `NO_ENTREGADO_RATE_LIMIT_COUNT`, `NO_ENTREGADO_RATE_LIMIT_WINDOW_SECONDS`: limite de frecuencia para intentos no entregados.
 
 ## static/vendor/bootstrap/css/bootstrap.min.css
@@ -255,6 +255,8 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `panel_home(...)`: muestra listado basico de hojas cargadas.
 - `panel_hoja_detalle(...)`: muestra detalle de hoja con filtros de remitos y contexto operativo.
 - `panel_evidencias(...)`: lista evidencias recientes para revision administrativa.
+- `panel_auditoria_remitos(...)`: lista transversal de remitos de todas las hojas con filtros de estado y conformado.
+- `panel_auditoria_remito_detalle(...)`: muestra cronologia de eventos, evidencias e intentos de un remito.
 - `panel_importar_pdf(...)`: recibe el PDF, llama al servicio de importacion y redirige al panel.
 - `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
 - `panel_importar_excel(...)`: permite previsualizar cabecera/remitos de Excel/CSV, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
@@ -296,6 +298,8 @@ Define endpoints iniciales del modulo tracking.
 - `panel/importar/pdf/`: formulario y procesamiento de importacion de PDF.
 - `panel/evidencias/`: listado de evidencias para revision.
 - `panel/evidencias/<id>/validar/`: formulario de validacion administrativa.
+- `panel/auditoria/remitos/`: listado transversal de remitos con filtros y acceso a cronologia.
+- `panel/auditoria/remitos/<id>/`: detalle del remito con linea de tiempo y evidencias historicas.
 - `panel/hojas/<oid>/cerrar/`: confirmacion de cierre de hoja.
 - `conformados/<canal>/<oid>/`: portal publico por canal y hoja.
 - `conformados/<canal>/<oid>/subir/`: alta publica de evidencia.

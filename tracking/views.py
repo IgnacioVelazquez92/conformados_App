@@ -14,11 +14,12 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.files.base import File
 from django.core.files.storage import default_storage
+from django.db.models import Count, Max, Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
-from .models import Evidencia, HojaRuta, Remito
+from .models import Evidencia, EventoTrazabilidad, HojaRuta, Remito
 from .services.authz import (
     can_close_hoja,
     can_grant_staff,
@@ -189,6 +190,18 @@ def _build_evidencia_file_context(evidencia: Evidencia) -> dict[str, str | bool]
         "is_image": extension in IMAGE_EXTENSIONS,
         "is_pdf": extension in PDF_EXTENSIONS,
     }
+
+
+def _timeline_badge_class(tipo: str) -> str:
+    return {
+        EventoTrazabilidad.Tipo.IMPORTACION: "bg-secondary",
+        EventoTrazabilidad.Tipo.APERTURA_LINK: "bg-info text-dark",
+        EventoTrazabilidad.Tipo.CARGA_EVIDENCIA: "bg-success",
+        EventoTrazabilidad.Tipo.INTENTO_FALLIDO: "bg-warning text-dark",
+        EventoTrazabilidad.Tipo.VALIDACION: "bg-primary",
+        EventoTrazabilidad.Tipo.RECHAZO: "bg-danger",
+        EventoTrazabilidad.Tipo.CIERRE: "bg-dark",
+    }.get(tipo, "bg-secondary")
 
 
 def root_redirect(request: HttpRequest) -> HttpResponse:
@@ -472,6 +485,117 @@ def panel_evidencias(request: HttpRequest) -> HttpResponse:
             "remito": remito_q,
             "estado": estado,
             "estados": Evidencia.EstadoValidacion.choices,
+        },
+    )
+
+
+@login_required
+def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
+    if not can_review_evidence(request.user):
+        messages.error(request, "No tenes permisos para revisar auditoría de remitos.")
+        return redirect("panel-home")
+
+    q = request.GET.get("q", "").strip()
+    estado = request.GET.get("estado", "").strip()
+    conformado = request.GET.get("conformado", "").strip()
+    hoja = request.GET.get("hoja", "").strip()
+
+    remitos_qs = (
+        Remito.objects.select_related("hoja_ruta")
+        .annotate(
+            evidencias_total=Count("evidencias", distinct=True),
+            intentos_total=Count("intentos", distinct=True),
+            fecha_ultima_evidencia=Max("evidencias__fecha_carga"),
+            fecha_ultimo_evento=Max("eventos__fecha_evento"),
+        )
+        .order_by("-hoja_ruta__fecha", "-created_at", "numero")
+    )
+
+    if q:
+        remitos_qs = remitos_qs.filter(
+            Q(numero__icontains=q)
+            | Q(cliente__icontains=q)
+            | Q(remito_uid__icontains=q)
+            | Q(hoja_ruta__nro_entrega__icontains=q)
+        )
+    if estado:
+        remitos_qs = remitos_qs.filter(estado=estado)
+    if hoja:
+        remitos_qs = remitos_qs.filter(hoja_ruta__nro_entrega__icontains=hoja)
+    if conformado == "si":
+        remitos_qs = remitos_qs.filter(evidencias_total__gt=0)
+    elif conformado == "no":
+        remitos_qs = remitos_qs.filter(evidencias_total=0)
+
+    return render(
+        request,
+        "tracking/panel_auditoria_remitos.html",
+        {
+            "remitos": remitos_qs,
+            "q": q,
+            "estado": estado,
+            "conformado": conformado,
+            "hoja": hoja,
+            "estados": Remito.Estado.choices,
+            "conformados": (("", "Todos"), ("si", "Con conformado"), ("no", "Sin conformado")),
+        },
+    )
+
+
+@login_required
+def panel_auditoria_remito_detalle(request: HttpRequest, remito_id: int) -> HttpResponse:
+    if not can_review_evidence(request.user):
+        messages.error(request, "No tenes permisos para revisar auditoría de remitos.")
+        return redirect("panel-home")
+
+    remito = get_object_or_404(Remito.objects.select_related("hoja_ruta"), pk=remito_id)
+    evidencias = list(remito.evidencias.select_related("hoja_ruta", "remito").order_by("-fecha_carga"))
+    intentos = list(remito.intentos.select_related("hoja_ruta", "remito").order_by("-fecha_evento"))
+    timeline_qs = (
+        remito.hoja_ruta.eventos.select_related("remito")
+        .filter(Q(remito=remito) | Q(remito__isnull=True))
+        .order_by("fecha_evento")
+    )
+
+    # Asociar evidencias e intentos a cada evento por proximidad temporal
+    timeline = []
+    for evento in timeline_qs:
+        # buscar evidencias cercanas al evento (2 minutos) y construir contexto de archivo
+        raw_matched_evidencias = [e for e in evidencias if abs((e.fecha_carga - evento.fecha_evento).total_seconds()) <= 120]
+        matched_evidencias = [
+            {"evidencia": e, "archivo": _build_evidencia_file_context(e)} for e in raw_matched_evidencias
+        ]
+        # buscar intentos cercanos al evento (2 minutos)
+        matched_intentos = [i for i in intentos if abs((i.fecha_evento - evento.fecha_evento).total_seconds()) <= 120]
+
+        timeline.append(
+            {
+                "evento": evento,
+                "badge_class": _timeline_badge_class(evento.tipo),
+                "evidencias": matched_evidencias,
+                "intentos": matched_intentos,
+            }
+        )
+
+    evidencia_rows = [
+        {
+            "evidencia": evidencia,
+            "archivo": _build_evidencia_file_context(evidencia),
+        }
+        for evidencia in evidencias
+    ]
+
+    return render(
+        request,
+        "tracking/panel_auditoria_remito_detalle.html",
+        {
+            "remito": remito,
+            "evidencias": evidencia_rows,
+            "intentos": intentos,
+            "timeline": timeline,
+            "fecha_ultima_evidencia": evidencias[0].fecha_carga if evidencias else None,
+            "total_evidencias": len(evidencias),
+            "total_intentos": len(intentos),
         },
     )
 
