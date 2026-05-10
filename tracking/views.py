@@ -24,7 +24,7 @@ from django.utils.dateparse import parse_date
 from django.db.models.functions import TruncDate
 
 from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
-from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito
+from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
 from .services.authz import (
     can_close_hoja,
     can_grant_staff,
@@ -349,51 +349,24 @@ def panel_usuarios(request: HttpRequest) -> HttpResponse:
 @login_required
 @user_passes_test(can_manage_users)
 def panel_permisos(request: HttpRequest) -> HttpResponse:
-    permisos = [
-        {
-            "accion": "Importar PDF",
-            "deposito": "Si",
-            "ventas": "No",
-            "jefe": "Si",
-            "otro": "No",
-        },
-        {
-            "accion": "Revisar y validar evidencias",
-            "deposito": "No",
-            "ventas": "No",
-            "jefe": "Si",
-            "otro": "No",
-        },
-        {
-            "accion": "Cerrar hoja",
-            "deposito": "No",
-            "ventas": "No",
-            "jefe": "Si",
-            "otro": "No",
-        },
-        {
-            "accion": "Gestionar usuarios",
-            "deposito": "No",
-            "ventas": "No",
-            "jefe": "Si",
-            "otro": "No",
-        },
-        {
-            "accion": "Compartir link logistica",
-            "deposito": "Si",
-            "ventas": "No",
-            "jefe": "Si",
-            "otro": "No",
-        },
-        {
-            "accion": "Compartir link cliente",
-            "deposito": "No",
-            "ventas": "Si",
-            "jefe": "Si",
-            "otro": "No",
-        },
+    roles = RoleDefinition.active_definitions()
+    acciones = [
+        ("Importar PDF", "can_import_pdf"),
+        ("Revisar y validar evidencias", "can_review_evidence"),
+        ("Cerrar hoja", "can_close_hoja"),
+        ("Gestionar usuarios", "can_manage_users"),
+        ("Compartir link logistica", "share_logistica_default"),
+        ("Compartir link cliente", "share_cliente_default"),
     ]
-    return render(request, "tracking/panel_permisos.html", {"permisos": permisos})
+    permisos = []
+    for accion, permission_key in acciones:
+        permisos.append(
+            {
+                "accion": accion,
+                "celdas": ["Si" if getattr(rol, permission_key) else "No" for rol in roles],
+            }
+        )
+    return render(request, "tracking/panel_permisos.html", {"permisos": permisos, "roles": roles})
 
 
 @login_required

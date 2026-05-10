@@ -6,9 +6,12 @@
 <section class="brand-card bg-white p-4 mb-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
     <div>
         <h1 class="h4 mb-1">Matriz de permisos por rol</h1>
-        <p class="text-secondary mb-0">Referencia operativa para administradores y jefatura.</p>
+        <p class="text-secondary mb-0">Referencia operativa para administradores y jefatura. Los roles se editan desde el admin.</p>
     </div>
-    <a class="btn btn-outline-secondary" href="/panel/usuarios/">Volver a usuarios</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="/panel/usuarios/">Volver a usuarios</a>
+        <a class="btn btn-dark" href="/admin/tracking/roledefinition/">Administrar roles</a>
+    </div>
 </section>
 
 <section class="brand-card bg-white p-0 overflow-hidden">
@@ -17,20 +20,18 @@
             <thead class="table-light">
                 <tr>
                     <th>Acción</th>
-                    <th>Depósito</th>
-                    <th>Ventas</th>
-                    <th>Jefe</th>
-                    <th>Otro</th>
+                    {% for rol in roles %}
+                        <th>{{ rol.label }}</th>
+                    {% endfor %}
                 </tr>
             </thead>
             <tbody>
                 {% for row in permisos %}
                 <tr>
                     <td>{{ row.accion }}</td>
-                    <td>{{ row.deposito }}</td>
-                    <td>{{ row.ventas }}</td>
-                    <td>{{ row.jefe }}</td>
-                    <td>{{ row.otro }}</td>
+                    {% for cell in row.celdas %}
+                        <td>{{ cell }}</td>
+                    {% endfor %}
                 </tr>
                 {% endfor %}
             </tbody>

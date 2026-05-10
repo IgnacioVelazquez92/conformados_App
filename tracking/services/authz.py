@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 
-from tracking.models import UserProfile
+from tracking.models import RoleDefinition, UserProfile
 
 
 def get_or_create_profile(user: User) -> UserProfile:
@@ -27,7 +27,7 @@ def can_manage_users(user: User) -> bool:
     if user.is_superuser or user.is_staff:
         return True
     profile = get_or_create_profile(user)
-    return profile.rol == UserProfile.Rol.JEFE
+    return RoleDefinition.permission_map(profile.rol)["can_manage_users"]
 
 
 def can_import_pdf(user: User) -> bool:
@@ -36,7 +36,7 @@ def can_import_pdf(user: User) -> bool:
     if user.is_superuser:
         return True
     profile = get_or_create_profile(user)
-    return profile.rol in {UserProfile.Rol.DEPOSITO, UserProfile.Rol.JEFE}
+    return RoleDefinition.permission_map(profile.rol)["can_import_pdf"]
 
 
 def can_review_evidence(user: User) -> bool:
@@ -45,7 +45,7 @@ def can_review_evidence(user: User) -> bool:
     if user.is_superuser:
         return True
     profile = get_or_create_profile(user)
-    return profile.rol == UserProfile.Rol.JEFE
+    return RoleDefinition.permission_map(profile.rol)["can_review_evidence"]
 
 
 def can_close_hoja(user: User) -> bool:

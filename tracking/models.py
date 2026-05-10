@@ -41,6 +41,58 @@ class HojaRuta(models.Model):
         return f"{self.nro_entrega} ({self.oid})"
 
 
+class RoleDefinition(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    label = models.CharField(max_length=120)
+    can_import_pdf = models.BooleanField(default=False)
+    can_review_evidence = models.BooleanField(default=False)
+    can_close_hoja = models.BooleanField(default=False)
+    can_manage_users = models.BooleanField(default=False)
+    share_logistica_default = models.BooleanField(default=False)
+    share_cliente_default = models.BooleanField(default=False)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["label"]
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.code})"
+
+    def permission_flags(self) -> dict[str, bool]:
+        return {
+            "can_import_pdf": self.can_import_pdf,
+            "can_review_evidence": self.can_review_evidence,
+            "can_close_hoja": self.can_close_hoja,
+            "can_manage_users": self.can_manage_users,
+            "share_logistica_default": self.share_logistica_default,
+            "share_cliente_default": self.share_cliente_default,
+        }
+
+    @classmethod
+    def active_definitions(cls) -> list["RoleDefinition"]:
+        return list(cls.objects.filter(active=True).order_by("label"))
+
+    @classmethod
+    def for_code(cls, code: str) -> "RoleDefinition | None":
+        return cls.objects.filter(code=code).first()
+
+    @classmethod
+    def permission_map(cls, code: str) -> dict[str, bool]:
+        definition = cls.for_code(code)
+        if definition:
+            return definition.permission_flags()
+        return {
+            "can_import_pdf": False,
+            "can_review_evidence": False,
+            "can_close_hoja": False,
+            "can_manage_users": False,
+            "share_logistica_default": False,
+            "share_cliente_default": False,
+        }
+
+
 class Remito(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = "pendiente", "Pendiente"
@@ -159,14 +211,8 @@ class EventoTrazabilidad(models.Model):
 
 
 class UserProfile(models.Model):
-    class Rol(models.TextChoices):
-        DEPOSITO = "deposito", "Deposito"
-        VENTAS = "ventas", "Ventas"
-        JEFE = "jefe", "Jefe"
-        OTRO = "otro", "Otro"
-
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
-    rol = models.CharField(max_length=20, choices=Rol.choices, default=Rol.OTRO)
+    rol = models.CharField(max_length=50, default="otro")
     share_logistica = models.BooleanField(default=False)
     share_cliente = models.BooleanField(default=False)
 
@@ -174,10 +220,12 @@ class UserProfile(models.Model):
         return f"{self.user.username} ({self.rol})"
 
     def can_share_logistica(self) -> bool:
-        return self.share_logistica or self.rol in {self.Rol.DEPOSITO, self.Rol.JEFE}
+        permissions = RoleDefinition.permission_map(self.rol)
+        return self.share_logistica or permissions["share_logistica_default"]
 
     def can_share_cliente(self) -> bool:
-        return self.share_cliente or self.rol in {self.Rol.VENTAS, self.Rol.JEFE}
+        permissions = RoleDefinition.permission_map(self.rol)
+        return self.share_cliente or permissions["share_cliente_default"]
 
 
 def _delete_file_field(file_field) -> None:

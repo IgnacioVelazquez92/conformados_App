@@ -2,6 +2,20 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 
+from .models import RoleDefinition
+
+
+def _role_choices(current_role: str | None = None) -> list[tuple[str, str]]:
+    roles = list(RoleDefinition.objects.filter(active=True).order_by("label").values_list("code", "label"))
+    seen = {code for code, _ in roles}
+
+    if current_role and current_role not in seen:
+        role = RoleDefinition.objects.filter(code=current_role).first()
+        if role:
+            roles.append((role.code, role.label))
+
+    return roles
+
 
 class ImportPdfForm(forms.Form):
     pdf_file = forms.FileField(label="PDF de Hoja de Ruta")
@@ -116,15 +130,14 @@ class UserCreateForm(forms.Form):
     password2 = forms.CharField(label="Confirmar contrasena", widget=forms.PasswordInput)
     rol = forms.ChoiceField(
         label="Rol",
-        choices=[
-            ("deposito", "Deposito"),
-            ("ventas", "Ventas"),
-            ("jefe", "Jefe"),
-            ("otro", "Otro"),
-        ],
+        choices=(),
     )
     share_logistica = forms.BooleanField(label="Permitir compartir link logistica", required=False)
     share_cliente = forms.BooleanField(label="Permitir compartir link cliente", required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["rol"].choices = _role_choices()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -139,17 +152,21 @@ class UserUpdateForm(forms.Form):
     password = forms.CharField(label="Nueva contrasena (opcional)", required=False, widget=forms.PasswordInput)
     rol = forms.ChoiceField(
         label="Rol",
-        choices=[
-            ("deposito", "Deposito"),
-            ("ventas", "Ventas"),
-            ("jefe", "Jefe"),
-            ("otro", "Otro"),
-        ],
+        choices=(),
     )
     share_logistica = forms.BooleanField(label="Permitir compartir link logistica", required=False)
     share_cliente = forms.BooleanField(label="Permitir compartir link cliente", required=False)
     is_active = forms.BooleanField(label="Usuario activo", required=False)
     is_staff = forms.BooleanField(label="Acceso staff", required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current_role = ""
+        if self.data:
+            current_role = self.data.get("rol", "")
+        if not current_role:
+            current_role = self.initial.get("rol", "")
+        self.fields["rol"].choices = _role_choices(current_role)
 
 
 class UserDeleteForm(forms.Form):

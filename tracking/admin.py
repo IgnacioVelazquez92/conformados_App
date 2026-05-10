@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, Remito, UserProfile, PublicAlertRecipient
+from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, PublicAlertRecipient, Remito, RoleDefinition, UserProfile
 
 
 class RemitoInline(admin.TabularInline):
@@ -77,6 +77,33 @@ class RemitoAdmin(admin.ModelAdmin):
     list_filter = ("estado", "fecha", "hoja_ruta__estado", "created_at")
     search_fields = ("numero", "remito_uid", "cliente", "subcliente", "direccion", "hoja_ruta__oid", "hoja_ruta__nro_entrega")
     readonly_fields = ("created_at",)
+
+
+@admin.register(RoleDefinition)
+class RoleDefinitionAdmin(admin.ModelAdmin):
+    list_display = (
+        "label",
+        "code",
+        "active",
+        "can_import_pdf",
+        "can_review_evidence",
+        "can_close_hoja",
+        "can_manage_users",
+        "share_logistica_default",
+        "share_cliente_default",
+    )
+    list_editable = (
+        "active",
+        "can_import_pdf",
+        "can_review_evidence",
+        "can_close_hoja",
+        "can_manage_users",
+        "share_logistica_default",
+        "share_cliente_default",
+    )
+    list_filter = ("active",)
+    search_fields = ("code", "label")
+    ordering = ("label",)
 
 
 @admin.register(Evidencia)

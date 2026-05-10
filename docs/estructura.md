@@ -157,6 +157,21 @@ Formulario de carga del PDF de Hoja de Ruta.
 - `UserCreateForm`: alta de usuario interno con rol y permisos de compartir links.
 - `UserUpdateForm`: edicion de datos de usuario interno, estado y rol.
 - `UserDeleteForm`: confirmacion de borrado de usuario.
+- `UserCreateForm` y `UserUpdateForm`: cargan los roles activos desde `RoleDefinition` para que el panel refleje la matriz editable del admin.
+
+## tracking/models.py
+
+Define entidades del dominio de trazabilidad y conformados.
+
+- `RoleDefinition`: define roles editables desde admin y sus permisos base.
+- `UserProfile.rol`: guarda el codigo de rol sin enum hardcodeado; se resuelve contra `RoleDefinition`.
+
+## tracking/admin.py
+
+Admin del dominio de trazabilidad para operacion interna.
+
+- `RoleDefinitionAdmin`: permite crear y editar roles y sus permisos asociados.
+- `RemitoAdmin`: expone `fecha` para auditar la fecha importada de cada remito.
 
 ## tracking/services/authz.py
 
@@ -171,6 +186,7 @@ Servicio de autenticacion/autorizacion de usuario interno.
 - `can_grant_staff(...)`: permiso para otorgar o quitar flag staff.
 - `update_user_with_profile(...)`: actualiza usuario y perfil de rol.
 - `delete_user_and_profile(...)`: elimina usuario y su perfil.
+- consulta `RoleDefinition` para resolver permisos de rol desde datos administrables.
 
 ## tracking/management/commands/ensure_initial_admin.py
 
@@ -242,19 +258,6 @@ Servicio de operaciones administrativas sobre evidencias y hojas.
 
 - `validar_evidencia(...)`: actualiza la validacion de la evidencia y el estado del remito.
 - `cerrar_hoja_ruta(...)`: cambia la hoja a cerrada solo si todos los remitos estan conformados u observados y luego registra el evento.
-
-## tracking/models.py
-
-Define entidades del dominio de trazabilidad y conformados.
-
-- `HojaRuta`: representa hoja importada del ERP y su estado operativo.
-- `Remito`: representa cada documento asociado a una hoja; incluye fecha individual del remito (distinta de la fecha general de la hoja).
-- `Evidencia`: guarda archivos cargados por canal y estado de validacion.
-- `IntentoEntrega`: registra intentos no concretados y motivo.
-- `IntentoAccesoPortal`: registra accesos publicos invalidados o a hojas inexistentes para auditoria y alertas.
-- `PublicAlertRecipient`: destinatarios activos para alertas publicas configurables desde admin.
-- `EventoTrazabilidad`: bitacora auditable de eventos del circuito.
-- `UserProfile`: perfil interno con rol y permisos de compartir links por canal.
 - `hoja_ruta_pdf_upload_to(...)`: construye ruta `hojas-ruta/{oid}/original.ext` para PDF.
 - `conformado_upload_to(...)`: construye ruta `conformados/{oid}/{remito_uid}/{timestamp}.ext`.
 - `_delete_file_field(...)`: elimina del storage el archivo asociado a un `FileField`.
@@ -270,6 +273,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `logout_view(...)`: cierra sesion de usuario.
 - `panel_usuarios(...)`: listado de usuarios internos con acciones CRUD.
 - `panel_permisos(...)`: muestra matriz de permisos por rol.
+- `panel_permisos(...)`: construye la matriz de permisos desde `RoleDefinition` para que el admin pueda agregar nuevos roles sin tocar codigo.
 - `panel_crear_usuario(...)`: alta de usuarios internos.
 - `panel_editar_usuario(...)`: edicion de usuarios internos.
 - `panel_eliminar_usuario(...)`: eliminacion de usuarios internos.
