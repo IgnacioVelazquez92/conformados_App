@@ -149,6 +149,15 @@ def _public_canal_segment(empresa: Empresa, canal: str) -> str:
     return f"{empresa.slug}-{canal}"
 
 
+def _render_invalid_public_route(request: HttpRequest, *, canal: str, oid: str) -> HttpResponse:
+    return render(
+        request,
+        "tracking/estado_hoja.html",
+        {"estado": "ruta_invalida", "canal": canal, "oid": oid},
+        status=400,
+    )
+
+
 def _parse_dashboard_date(value: str | None, default: date) -> date:
     parsed = parse_date(value or "") if value else None
     return parsed or default
@@ -1228,8 +1237,8 @@ def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
 
 def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     empresa, canal_real = _resolve_public_empresa_canal(canal)
-    if canal_real not in PUBLIC_CHANNELS:
-        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+    if canal_real not in PUBLIC_CHANNELS or empresa is None:
+        return _render_invalid_public_route(request, canal=canal, oid=oid)
     canal = canal_real
     oid_text = str(oid).strip()
 
@@ -1322,8 +1331,8 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
 
 def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     empresa, canal_real = _resolve_public_empresa_canal(canal)
-    if canal_real not in PUBLIC_CHANNELS:
-        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+    if canal_real not in PUBLIC_CHANNELS or empresa is None:
+        return _render_invalid_public_route(request, canal=canal, oid=str(oid))
     canal = canal_real
     hoja_qs = HojaRuta.objects.select_related("empresa").filter(oid=oid)
     if empresa:
@@ -1394,8 +1403,8 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
 
 def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     empresa, canal_real = _resolve_public_empresa_canal(canal)
-    if canal_real not in PUBLIC_CHANNELS:
-        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+    if canal_real not in PUBLIC_CHANNELS or empresa is None:
+        return _render_invalid_public_route(request, canal=canal, oid=str(oid))
     canal = canal_real
     hoja_qs = HojaRuta.objects.select_related("empresa").filter(oid=oid)
     if empresa:

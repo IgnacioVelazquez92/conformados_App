@@ -329,6 +329,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `panel_auditoria_remitos(...)`: lista transversal de remitos de las empresas permitidas con filtros de estado y conformado.
 - `panel_auditoria_remito_detalle(...)`: muestra cronologia de eventos, evidencias e intentos de un remito.
 - `conformados_portal(...)`: valida acceso publico por `{empresa_slug}-{canal}` + oid y registra intentos a oids invalidos o inexistentes.
+- `conformados_portal(...)`: rechaza rutas antiguas como `/conformados/logistica/{oid}/` para evitar mezclar errores de formato con hojas no importadas.
 - `panel_importar_pdf(...)`: exige empresa autorizada, recibe el PDF, llama al servicio de importacion y redirige al panel.
 - `panel_importar_pdf(...)`: permite previsualizar cabecera/remitos del PDF, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
 - `panel_importar_excel(...)`: exige empresa autorizada, permite previsualizar Excel/CSV, guarda una copia temporal en storage y luego confirma la importacion sin volver a seleccionar archivo.
@@ -344,6 +345,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `_get_scoped_hoja_or_404(...)`: obtiene hoja por empresa + oid evitando ambiguedad por OID repetido.
 - `_resolve_public_empresa_canal(...)`: interpreta canales publicos con formato `{empresa_slug}-{canal}`.
 - `_public_canal_segment(...)`: genera el segmento publico `{empresa_slug}-{canal}` para links compartidos.
+- `_render_invalid_public_route(...)`: responde 400 para links publicos sin slug de empresa o con slug invalido, sin registrarlos como HR no cargadas.
 - `conformados_portal(...)`: valida existencia/estado de hoja y lista remitos por canal.
 - `conformados_portal(...)`: agrega flujo por pasos (buscar/escaneo de remito, seleccion y accion unica).
 - `_format_manual_remito(...)`: valida la busqueda manual con formato `00009-00022221` o 13 digitos sin guion, informando digitos faltantes o sobrantes.
@@ -545,6 +547,8 @@ Template Bootstrap para subir Excel/CSV, previsualizar datos detectados y confir
 
 Template Bootstrap de estado para hoja inexistente o cerrada en portal publico.
 
+- distingue ruta publica invalida/sin empresa de hoja no importada para no contaminar auditoria de HR no cargadas.
+
 ## templates/tracking/conformados_portal.html
 
 Template Bootstrap responsivo con UX por pasos para canal publico:
@@ -563,6 +567,7 @@ Template Bootstrap responsivo con UX por pasos para canal publico:
 - boton `Subir archivo` que abre el input real del formulario Django (sin duplicar inputs de archivo).
 - inicializacion de modales diferida a `window.load` para asegurar que `bootstrap.bundle.min.js` ya este cargado y evitar errores `bootstrap is not defined`.
 - previsualizacion obligatoria de imagen/PDF antes de subir evidencia y validacion cliente de tamano.
+- la vista de camara para fotografiar conformados no espeja el video, de modo que la direccion del movimiento coincida con la camara trasera.
 - errores del formulario de evidencia visibles dentro del modal (incluye rechazo por evidencia duplicada o archivo invalido).
 - confirmacion explicita para permitir evidencia duplicada, sincronizada con `confirmar_duplicada` del formulario.
 - el check de duplicada solo se muestra cuando el backend confirma que el remito ya tiene evidencia (`remito_tiene_evidencia`).
