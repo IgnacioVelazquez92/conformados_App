@@ -66,6 +66,22 @@ class ImportSpreadsheetForm(forms.Form):
         return archivo
 
 
+class ImportUsersForm(forms.Form):
+    archivo = forms.FileField(label="Excel de usuarios")
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data["archivo"]
+        name = (archivo.name or "").lower()
+        content_type = getattr(archivo, "content_type", "") or ""
+        allowed_types = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+        )
+        if not name.endswith((".xlsx", ".xlsm")) and content_type not in allowed_types:
+            raise forms.ValidationError("El archivo debe ser Excel (.xlsx o .xlsm).")
+        return archivo
+
+
 class EvidenciaForm(forms.Form):
     archivo = forms.FileField(
         label="Archivo de conformado",

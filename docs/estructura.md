@@ -173,6 +173,7 @@ Formulario de carga del PDF de Hoja de Ruta.
 - `LoginForm`: formulario de autenticacion para panel interno.
 - `UserCreateForm`: alta de usuario interno con rol, empresa principal, empresas autorizadas y permisos de compartir links.
 - `UserUpdateForm`: edicion de datos de usuario interno, estado, rol y alcance por empresa.
+- `ImportUsersForm`: valida archivo Excel para alta/actualizacion masiva de usuarios internos.
 - `UserDeleteForm`: confirmacion de borrado de usuario.
 - `UserCreateForm` y `UserUpdateForm`: cargan los roles activos desde `RoleDefinition` para que el panel refleje la matriz editable del admin.
 
@@ -276,6 +277,19 @@ Servicio de importacion de hojas de ruta desde Excel o CSV.
 - acepta columna `fecha` para asignar fecha individual a cada remito.
 - tolera fechas de Excel como `date` o `datetime` y las normaliza antes de guardar `Remito.fecha`.
 
+## tracking/services/import_users.py
+
+Servicio de importacion masiva de usuarios internos desde Excel.
+
+- `USER_IMPORT_HEADERS`: define columnas esperadas para la plantilla de usuarios.
+- `DEFAULT_IMPORT_PASSWORD`: contrasena generica usada si un usuario nuevo no trae password.
+- `ImportedUserRow`: estructura validada de una fila de usuario.
+- `UserImportResult`: resultado con cantidad de usuarios creados y actualizados.
+- `_empresa_by_token(...)`: resuelve empresa activa por `code` o `slug`.
+- `_parse_empresas(...)`: interpreta empresas separadas por coma o punto y coma.
+- `parse_users_excel(...)`: valida encabezados, roles, empresas y duplicados antes de persistir.
+- `import_users_excel(...)`: crea o actualiza usuarios, perfil, rol, empresa principal y empresas autorizadas.
+
 ## tracking/admin.py
 
 Admin del dominio de trazabilidad para inspeccion y operacion interna.
@@ -316,6 +330,8 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `login_view(...)`: autentica usuarios internos.
 - `logout_view(...)`: cierra sesion de usuario.
 - `panel_usuarios(...)`: listado de usuarios internos con acciones CRUD.
+- `panel_descargar_plantilla_usuarios(...)`: genera plantilla Excel con hoja de usuarios, roles, empresas e instrucciones.
+- `panel_importar_usuarios(...)`: importa usuarios desde Excel usando rol y empresas autorizadas.
 - `panel_permisos(...)`: muestra matriz de permisos por rol.
 - `panel_permisos(...)`: construye la matriz de permisos desde `RoleDefinition`, incluida auditoria de remitos, para que el admin pueda agregar nuevos roles sin tocar codigo.
 - `panel_crear_usuario(...)`: alta de usuarios internos.
@@ -371,6 +387,8 @@ Define endpoints iniciales del modulo tracking.
 - `panel/`: panel operativo interno.
 - `panel/permisos/`: matriz de permisos por rol.
 - `panel/usuarios/`: listado de usuarios internos.
+- `panel/usuarios/importar/`: importacion masiva de usuarios desde Excel.
+- `panel/usuarios/plantilla/`: descarga de plantilla Excel para usuarios.
 - `panel/usuarios/nuevo/`: alta de usuario interno con rol.
 - `panel/usuarios/<id>/editar/`: edicion de usuario interno.
 - `panel/usuarios/<id>/eliminar/`: eliminacion de usuario interno.
@@ -495,6 +513,15 @@ Template para alta de usuario interno con rol.
 Template para listar usuarios internos y navegar al CRUD.
 
 - muestra rol, empresa principal y empresas autorizadas de cada usuario.
+- enlaza descarga de plantilla e importacion Excel de usuarios.
+
+## templates/tracking/importar_usuarios.html
+
+Template Bootstrap para importar usuarios desde Excel.
+
+- resume columnas requeridas.
+- explica uso de empresas separadas por coma.
+- informa la contrasena generica para usuarios nuevos sin password.
 
 ## templates/tracking/panel_permisos.html
 

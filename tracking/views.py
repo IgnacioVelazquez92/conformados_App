@@ -23,7 +23,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.db.models.functions import TruncDate
 
-from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
+from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, ImportUsersForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
 from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
 from .services.authz import (
     can_audit_remitos,
@@ -45,6 +45,7 @@ from .services.conformados import registrar_evidencia, registrar_intento_acceso_
 from .services.email_alerts import send_public_access_alert
 from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_page_texts_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf_pages
 from .services.import_tabular import import_tabular_file, parse_tabular_file
+from .services.import_users import DEFAULT_IMPORT_PASSWORD, USER_IMPORT_HEADERS, import_users_excel
 
 REMITO_MANUAL_PATTERN = re.compile(r"^\d{5}-\d{8}$")
 REMITO_MANUAL_DIGITS_PATTERN = re.compile(r"^\d{13}$")
@@ -526,6 +527,104 @@ def panel_eliminar_usuario(request: HttpRequest, user_id: int) -> HttpResponse:
         form = UserDeleteForm()
 
     return render(request, "tracking/panel_eliminar_usuario.html", {"form": form, "usuario": usuario})
+
+
+@login_required
+@user_passes_test(can_manage_users)
+def panel_descargar_plantilla_usuarios(request: HttpRequest) -> HttpResponse:
+    empresas_activas = list(Empresa.objects.filter(active=True).order_by("name"))
+    ejemplo_empresa = empresas_activas[0].code if empresas_activas else ""
+    ejemplo_empresas = ",".join(empresa.code for empresa in empresas_activas[:2])
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "usuarios"
+    ws.append(USER_IMPORT_HEADERS)
+    ws.append(
+        [
+            "usuario.ejemplo",
+            "Nombre",
+            "Apellido",
+            "usuario@example.com",
+            DEFAULT_IMPORT_PASSWORD,
+            "otro",
+            ejemplo_empresa,
+            ejemplo_empresas,
+            "si",
+            "no",
+            "no",
+        ]
+    )
+    ws.freeze_panes = "A2"
+    widths = [22, 18, 18, 28, 18, 18, 22, 28, 12, 18, 18]
+    for index, width in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=index).column_letter].width = width
+
+    roles_ws = wb.create_sheet("roles")
+    roles_ws.append(["codigo", "nombre"])
+    for role in RoleDefinition.objects.filter(active=True).order_by("label"):
+        roles_ws.append([role.code, role.label])
+    roles_ws.column_dimensions["A"].width = 24
+    roles_ws.column_dimensions["B"].width = 32
+
+    empresas_ws = wb.create_sheet("empresas")
+    empresas_ws.append(["codigo", "slug", "nombre"])
+    for empresa in Empresa.objects.filter(active=True).order_by("name"):
+        empresas_ws.append([empresa.code, empresa.slug, empresa.name])
+    empresas_ws.column_dimensions["A"].width = 24
+    empresas_ws.column_dimensions["B"].width = 24
+    empresas_ws.column_dimensions["C"].width = 32
+
+    instrucciones_ws = wb.create_sheet("instrucciones")
+    instrucciones = [
+        ["Campo", "Uso"],
+        ["username", "Obligatorio. Si existe, el usuario se actualiza."],
+        ["nombre/apellido/email", "Datos personales del usuario."],
+        ["password", f"Opcional para usuarios existentes. Si se deja vacio en usuarios nuevos se usa {DEFAULT_IMPORT_PASSWORD}."],
+        ["rol", "Codigo de la hoja roles."],
+        ["empresa_principal", "Codigo o slug de una empresa autorizada. Si se deja vacio, usa la primera de empresas."],
+        ["empresas", "Codigos o slugs separados por coma. Ejemplo: ph,sr,dyn."],
+        ["activo/share_logistica/share_cliente", "Usar si/no."],
+    ]
+    for row in instrucciones:
+        instrucciones_ws.append(row)
+    instrucciones_ws.column_dimensions["A"].width = 28
+    instrucciones_ws.column_dimensions["B"].width = 100
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="plantilla-importar-usuarios.xlsx"'
+    return response
+
+
+@login_required
+@user_passes_test(can_manage_users)
+def panel_importar_usuarios(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        form = ImportUsersForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                result = import_users_excel(form.cleaned_data["archivo"])
+            except Exception as exc:
+                form.add_error("archivo", str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"Importacion completada: {result.created} usuario(s) creado(s), {result.updated} actualizado(s).",
+                )
+                return redirect("panel-usuarios")
+    else:
+        form = ImportUsersForm()
+
+    return render(
+        request,
+        "tracking/importar_usuarios.html",
+        {"form": form, "default_password": DEFAULT_IMPORT_PASSWORD},
+    )
 
 
 @login_required

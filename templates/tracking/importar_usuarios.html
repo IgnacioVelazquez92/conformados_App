@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Importar usuarios{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+        <div>
+            <h1 class="h4 mb-1">Importar usuarios por Excel</h1>
+            <p class="text-secondary mb-0">Alta o actualizacion masiva de usuarios internos, rol y empresas autorizadas.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-start">
+            <a class="btn btn-outline-dark" href="/panel/usuarios/plantilla/">Descargar plantilla</a>
+            <a class="btn btn-outline-secondary" href="/panel/usuarios/">Volver</a>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <div class="fw-semibold mb-1">Columnas principales</div>
+        <div class="small">`username`, `nombre`, `apellido`, `email`, `password`, `rol`, `empresa_principal`, `empresas`.</div>
+        <div class="small mt-1">Para varias empresas usa codigos o slugs separados por coma: <code>ph,sr,dyn</code>.</div>
+        <div class="small mt-1">Si un usuario nuevo no trae password, se usa <code>{{ default_password }}</code>.</div>
+    </div>
+
+    {% if form.errors %}
+        <div class="alert alert-danger">{{ form.errors }}</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="row g-3">
+        {% csrf_token %}
+        <div class="col-12">{{ form.as_p }}</div>
+        <div class="col-12 form-actions">
+            <button class="btn btn-dark" type="submit">Importar usuarios</button>
+            <a class="btn btn-outline-secondary" href="/panel/usuarios/">Cancelar</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
