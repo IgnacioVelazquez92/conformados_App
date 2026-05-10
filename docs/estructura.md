@@ -427,6 +427,8 @@ Template para confirmar y ejecutar la eliminacion de un usuario.
 
 Template basico para listar evidencias y acceder a su revision.
 
+- muestra la fecha del remito con fallback `-` cuando el dato no fue importado o aun no existe.
+
 ## templates/tracking/validar_evidencia.html
 
 Template para validar, observar o rechazar una evidencia.

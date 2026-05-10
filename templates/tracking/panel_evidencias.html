@@ -44,7 +44,7 @@
                 {% for evidencia in evidencias %}
                 <tr>
                     <td>{{ evidencia.hoja_ruta.nro_entrega }}</td>
-                    <td>{{ evidencia.remito.fecha|date:"d/m/Y" }}</td>
+                    <td>{{ evidencia.remito.fecha|date:"d/m/Y"|default:"-" }}</td>
                     <td>{{ evidencia.fecha_carga|date:"d/m/Y H:i" }}</td>
                     <td>{{ evidencia.remito.numero }}</td>
                     <td>{{ evidencia.canal }}</td>
