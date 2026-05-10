@@ -214,6 +214,13 @@ Servicio de importacion de hojas de ruta desde Excel o CSV.
 - `import_tabular_file(...)`: persiste la importacion tabular usando la misma logica de dominio.
 - exige columna `remito_oid`, la valida como UUID y la guarda como `Remito.remito_uid` para filtrar por QR fisico del remito.
 - acepta columna `fecha` para asignar fecha individual a cada remito.
+- tolera fechas de Excel como `date` o `datetime` y las normaliza antes de guardar `Remito.fecha`.
+
+## tracking/admin.py
+
+Admin del dominio de trazabilidad para inspeccion y operacion interna.
+
+- `RemitoAdmin`: lista remitos con `fecha` visible para verificar importaciones.
 
 ## tracking/services/conformados.py
 

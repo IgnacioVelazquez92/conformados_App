@@ -4,7 +4,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -146,8 +146,12 @@ def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
     raise ValueError("No se pudo extraer el oid desde el QR del PDF.")
 
 
-def _normalize_value(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip()
+def _normalize_value(value: Any) -> str:
+    if isinstance(value, datetime):
+        value = value.date().isoformat()
+    elif isinstance(value, date):
+        value = value.isoformat()
+    return re.sub(r"\s+", " ", str(value)).strip()
 
 
 def _merge_wrapped_uuid_lines(lines: list[str]) -> list[str]:
@@ -166,8 +170,17 @@ def _merge_wrapped_uuid_lines(lines: list[str]) -> list[str]:
     return merged
 
 
-def _parse_date(value: str) -> datetime.date:
+def _parse_date(value: Any) -> datetime.date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
     value = _normalize_value(value)
+    if " " in value:
+        value = value.split(" ", 1)[0]
+    if "T" in value:
+        value = value.split("T", 1)[0]
     for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d", "%d-%m-%Y"):
         try:
             return datetime.strptime(value, fmt).date()

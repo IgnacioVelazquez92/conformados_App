@@ -73,8 +73,8 @@ class HojaRutaAdmin(admin.ModelAdmin):
 
 @admin.register(Remito)
 class RemitoAdmin(admin.ModelAdmin):
-    list_display = ("numero", "remito_uid", "hoja_ruta", "cliente", "subcliente", "direccion", "estado", "created_at")
-    list_filter = ("estado", "hoja_ruta__estado", "created_at")
+    list_display = ("numero", "remito_uid", "hoja_ruta", "fecha", "cliente", "subcliente", "direccion", "estado", "created_at")
+    list_filter = ("estado", "fecha", "hoja_ruta__estado", "created_at")
     search_fields = ("numero", "remito_uid", "cliente", "subcliente", "direccion", "hoja_ruta__oid", "hoja_ruta__nro_entrega")
     readonly_fields = ("created_at",)
 
