@@ -188,6 +188,7 @@ Define entidades del dominio de trazabilidad y conformados.
 - `IntentoAccesoPortal`: audita intentos invalidos o inexistentes, con empresa cuando el link publico la identifica.
 - `EventoTrazabilidad`: bitacora asociada a empresa para no mezclar auditoria entre tenants.
 - `RoleDefinition`: define roles editables desde admin y sus permisos base.
+- `RoleDefinition.can_audit_remitos`: permiso independiente para entrar a la auditoria transversal de remitos sin habilitar revision de evidencias.
 - `UserProfile.rol`: guarda el codigo de rol sin enum hardcodeado; se resuelve contra `RoleDefinition`.
 - `UserProfile.empresa_principal`: empresa por defecto visual/operativa del usuario.
 - `UserProfile.empresas`: empresas autorizadas para usuarios internos o auditores corporativos.
@@ -197,15 +198,18 @@ Define entidades del dominio de trazabilidad y conformados.
 Admin del dominio de trazabilidad para operacion interna.
 
 - `EmpresaAdmin`: gestiona empresas activas, slug publico y archivo CSS de tema.
+- `MultiEmpresaUserCreationForm`: formulario de alta de usuario en Django admin con rol, empresa principal y empresas autorizadas.
+- `UserProfileInline`: permite ver y editar alcance multiempresa desde la ficha del usuario en Django admin.
+- `UserAdmin`: reemplaza el admin default de usuarios para listar empresa principal/autorizadas y permitir alta multiempresa.
 - `RoleDefinitionAdmin`: permite crear y editar roles y sus permisos asociados.
 - `HojaRutaAdmin`, `RemitoAdmin`, `EvidenciaAdmin`, `IntentoEntregaAdmin`, `IntentoAccesoPortalAdmin` y `EventoTrazabilidadAdmin`: exponen empresa en listados/filtros para auditoria segmentada.
-- `UserProfileAdmin`: permite asociar empresa principal y empresas autorizadas.
+- `UserProfileAdmin`: permite asociar empresa principal y empresas autorizadas desde la tabla de perfiles.
 
 ## tracking/context_processors.py
 
 Contexto visual multiempresa para templates.
 
-- `empresa_theme(...)`: obtiene la empresa activa del request/usuario, expone `bootstrap_css_path`, `brand_name`, `active_empresa` y `empresas_usuario`.
+- `empresa_theme(...)`: obtiene la empresa activa del request o sesion del usuario, expone `bootstrap_css_path`, `brand_name`, `active_empresa` y `empresas_usuario`; usuarios anonimos quedan con marca generica salvo portales publicos con empresa resuelta por URL.
 
 ## tracking/services/authz.py
 
@@ -214,11 +218,12 @@ Servicio de autenticacion/autorizacion de usuario interno.
 - `get_or_create_profile(...)`: asegura perfil de rol para el usuario autenticado.
 - `get_user_empresas(...)`: devuelve empresas activas autorizadas para un usuario; superusuarios ven todas.
 - `user_can_access_empresa(...)`: valida si un usuario interno puede operar una empresa.
-- `get_active_empresa_for_user(...)`: resuelve la empresa activa desde querystring, perfil o primer acceso permitido.
+- `get_active_empresa_for_user(...)`: resuelve la empresa activa desde querystring/sesion, perfil o Pharmacenter como default permitido antes de caer al primer acceso disponible.
 - `create_user_with_profile(...)`: crea usuario y su `UserProfile` asociado con alcance por empresa.
 - `can_manage_users(...)`: permiso para CRUD de usuarios internos.
 - `can_import_pdf(...)`: permiso para importar hojas desde PDF.
 - `can_review_evidence(...)`: permiso para revisar/validar evidencias.
+- `can_audit_remitos(...)`: permiso para ver auditoria de remitos; tambien acepta roles antiguos con `can_review_evidence`.
 - `can_close_hoja(...)`: permiso para cierre operativo de hoja.
 - `can_grant_staff(...)`: permiso para otorgar o quitar flag staff.
 - `update_user_with_profile(...)`: actualiza usuario, perfil de rol y alcance por empresa.
@@ -312,7 +317,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `logout_view(...)`: cierra sesion de usuario.
 - `panel_usuarios(...)`: listado de usuarios internos con acciones CRUD.
 - `panel_permisos(...)`: muestra matriz de permisos por rol.
-- `panel_permisos(...)`: construye la matriz de permisos desde `RoleDefinition` para que el admin pueda agregar nuevos roles sin tocar codigo.
+- `panel_permisos(...)`: construye la matriz de permisos desde `RoleDefinition`, incluida auditoria de remitos, para que el admin pueda agregar nuevos roles sin tocar codigo.
 - `panel_crear_usuario(...)`: alta de usuarios internos.
 - `panel_editar_usuario(...)`: edicion de usuarios internos.
 - `panel_eliminar_usuario(...)`: eliminacion de usuarios internos.
@@ -335,7 +340,7 @@ Vistas HTTP iniciales para panel y portales publicos.
 - `_check_rate_limit(...)`: limita intentos por ventana usando cache de Django.
 - `_rate_limit_key(...)`: construye clave de limite por accion, IP, canal, hoja y remito.
 - `_evidencia_limits_context(...)`: expone limites de tamano al template publico.
-- `_scope_by_empresa(...)`: limita querysets a empresas autorizadas y respeta `?empresa=` cuando corresponde.
+- `_scope_by_empresa(...)`: limita querysets a la empresa activa autorizada, usando `?empresa=` o la empresa guardada en sesion.
 - `_get_scoped_hoja_or_404(...)`: obtiene hoja por empresa + oid evitando ambiguedad por OID repetido.
 - `_resolve_public_empresa_canal(...)`: interpreta canales publicos con formato `{empresa_slug}-{canal}`.
 - `_public_canal_segment(...)`: genera el segmento publico `{empresa_slug}-{canal}` para links compartidos.
@@ -439,6 +444,13 @@ Migracion fundacional multiempresa.
 - asigna registros historicos a Pharmacenter como empresa inicial.
 - reemplaza unicidad global de `HojaRuta.oid` por unicidad compuesta `empresa + oid`.
 
+## tracking/migrations/0009_role_audit_remitos.py
+
+Migracion de permiso granular para auditoria.
+
+- agrega `RoleDefinition.can_audit_remitos`.
+- habilita inicialmente el permiso en roles que ya tenian `can_review_evidence` para no quitar accesos existentes.
+
 ## templates/tracking/panel_home.html
 
 Template del panel operativo interno.
@@ -480,9 +492,13 @@ Template para alta de usuario interno con rol.
 
 Template para listar usuarios internos y navegar al CRUD.
 
+- muestra rol, empresa principal y empresas autorizadas de cada usuario.
+
 ## templates/tracking/panel_permisos.html
 
 Template de referencia con matriz de permisos por rol.
+
+- muestra el permiso independiente de auditoria de remitos.
 
 ## templates/tracking/panel_editar_usuario.html
 
@@ -560,8 +576,8 @@ Layout base compartido por todos los templates.
 
 - carga Bootstrap CSS/JS desde `static/vendor/bootstrap/`, usando el CSS asociado a la empresa activa.
 - deja `bootstrap-icons` como unica dependencia por CDN.
-- centraliza navbar responsive y estilos globales mobile-first.
-- muestra empresa activa o selector de empresa para usuarios con alcance multiple.
+- centraliza navbar responsive con `bg-primary` del tema activo para que el contexto visual cambie por empresa.
+- muestra marca generica antes de login; luego muestra empresa activa o selector para usuarios con alcance multiple, guardando la seleccion en sesion.
 - expone bloques `extra_head` y `extra_scripts` para assets especificos de cada pagina.
 - mantiene accesos simples al panel y a evidencias desde la barra superior.
 

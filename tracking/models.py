@@ -73,6 +73,7 @@ class RoleDefinition(models.Model):
     label = models.CharField(max_length=120)
     can_import_pdf = models.BooleanField(default=False)
     can_review_evidence = models.BooleanField(default=False)
+    can_audit_remitos = models.BooleanField(default=False)
     can_close_hoja = models.BooleanField(default=False)
     can_manage_users = models.BooleanField(default=False)
     share_logistica_default = models.BooleanField(default=False)
@@ -91,6 +92,7 @@ class RoleDefinition(models.Model):
         return {
             "can_import_pdf": self.can_import_pdf,
             "can_review_evidence": self.can_review_evidence,
+            "can_audit_remitos": self.can_audit_remitos,
             "can_close_hoja": self.can_close_hoja,
             "can_manage_users": self.can_manage_users,
             "share_logistica_default": self.share_logistica_default,
@@ -113,6 +115,7 @@ class RoleDefinition(models.Model):
         return {
             "can_import_pdf": False,
             "can_review_evidence": False,
+            "can_audit_remitos": False,
             "can_close_hoja": False,
             "can_manage_users": False,
             "share_logistica_default": False,

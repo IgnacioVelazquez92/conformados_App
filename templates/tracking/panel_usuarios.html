@@ -23,6 +23,8 @@
                     <th>Usuario</th>
                     <th>Email</th>
                     <th>Rol</th>
+                    <th>Empresa principal</th>
+                    <th>Empresas autorizadas</th>
                     <th>Activo</th>
                     <th>Staff</th>
                     <th>Acciones</th>
@@ -34,6 +36,14 @@
                     <td>{{ row.user.username }}</td>
                     <td>{{ row.user.email|default:"-" }}</td>
                     <td>{{ row.profile.get_rol_display }}</td>
+                    <td>{{ row.profile.empresa_principal.name|default:"-" }}</td>
+                    <td>
+                        {% for empresa in row.empresas %}
+                            <span class="badge text-bg-light border">{{ empresa.name }}</span>
+                        {% empty %}
+                            <span class="text-secondary">-</span>
+                        {% endfor %}
+                    </td>
                     <td>{{ row.user.is_active|yesno:"Si,No" }}</td>
                     <td>
                         {% if can_grant_staff %}
@@ -49,7 +59,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center text-secondary py-4">No hay usuarios internos.</td>
+                    <td colspan="8" class="text-center text-secondary py-4">No hay usuarios internos.</td>
                 </tr>
                 {% endfor %}
             </tbody>

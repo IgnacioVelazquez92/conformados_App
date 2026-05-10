@@ -44,6 +44,7 @@
         </a>
     </div>
     {% endif %}
+    {% if can_audit_remitos %}
     <div class="col-12 col-md-6 col-xl-3">
         <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/remitos/">
             <div>
@@ -53,6 +54,7 @@
             <span class="quick-access-icon bg-warning-subtle text-warning"><i class="bi bi-clipboard-data"></i></span>
         </a>
     </div>
+    {% endif %}
     {% if can_review_evidence %}
     <div class="col-12 col-md-6 col-xl-3">
         <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/hr-no-cargadas/">

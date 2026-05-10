@@ -40,6 +40,9 @@ def get_active_empresa_for_user(user: User, requested_slug: str = "") -> Empresa
     profile = get_or_create_profile(user) if user.is_authenticated else None
     if profile and profile.empresa_principal_id and empresas.filter(pk=profile.empresa_principal_id).exists():
         return profile.empresa_principal
+    default_empresa = empresas.filter(code="pharmacenter").first()
+    if default_empresa:
+        return default_empresa
     return empresas.order_by("name").first()
 
 
@@ -92,6 +95,16 @@ def can_review_evidence(user: User) -> bool:
         return True
     profile = get_or_create_profile(user)
     return RoleDefinition.permission_map(profile.rol)["can_review_evidence"]
+
+
+def can_audit_remitos(user: User) -> bool:
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    profile = get_or_create_profile(user)
+    permissions = RoleDefinition.permission_map(profile.rol)
+    return permissions["can_audit_remitos"] or permissions["can_review_evidence"]
 
 
 def can_close_hoja(user: User) -> bool:

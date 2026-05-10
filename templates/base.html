@@ -11,7 +11,7 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom mb-4">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm mb-4">
         <div class="container brand-shell">
             <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/dashboard/">
                 <i class="bi bi-box-seam"></i>
@@ -26,19 +26,19 @@
                         {% if empresas_usuario|length > 1 %}
                             <form class="d-flex align-items-center" method="get" action="{{ request.path }}">
                                 <label class="visually-hidden" for="empresa-navbar">Empresa</label>
-                                <select id="empresa-navbar" class="form-select form-select-sm" name="empresa" onchange="this.form.submit()">
+                                <select id="empresa-navbar" class="form-select form-select-sm border-0 shadow-sm" name="empresa" onchange="this.form.submit()">
                                     {% for empresa in empresas_usuario %}
                                         <option value="{{ empresa.slug }}" {% if active_empresa and active_empresa.slug == empresa.slug %}selected{% endif %}>{{ empresa.name }}</option>
                                     {% endfor %}
                                 </select>
                             </form>
                         {% elif active_empresa %}
-                            <span class="navbar-text text-secondary">{{ active_empresa.name }}</span>
+                            <span class="navbar-text text-white-50">{{ active_empresa.name }}</span>
                         {% endif %}
                         <a class="nav-link" href="/dashboard/">Dashboard</a>
                         <a class="nav-link" href="/panel/">Panel</a>
                         <a class="nav-link" href="/panel/evidencias/">Evidencias</a>
-                        <span class="navbar-text text-secondary">{{ request.user.username }}</span>
+                        <span class="navbar-text text-white-50">{{ request.user.username }}</span>
                         <a class="nav-link" href="/accounts/logout/">Salir</a>
                     {% else %}
                         <a class="nav-link" href="/accounts/login/">Ingresar</a>

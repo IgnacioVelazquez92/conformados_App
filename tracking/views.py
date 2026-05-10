@@ -26,6 +26,7 @@ from django.db.models.functions import TruncDate
 from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
 from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
 from .services.authz import (
+    can_audit_remitos,
     can_close_hoja,
     can_grant_staff,
     can_import_pdf,
@@ -92,9 +93,11 @@ def _evidencia_limits_context() -> dict[str, int]:
 
 def _empresas_context(request: HttpRequest) -> dict:
     empresas = get_user_empresas(request.user)
-    active = get_active_empresa_for_user(request.user, request.GET.get("empresa", ""))
+    requested_slug = request.GET.get("empresa", "").strip() or request.session.get("active_empresa_slug", "")
+    active = get_active_empresa_for_user(request.user, requested_slug)
     if active:
         request.active_empresa = active
+        request.session["active_empresa_slug"] = active.slug
     return {
         "empresas_usuario": empresas,
         "empresa_activa": active,
@@ -104,19 +107,24 @@ def _empresas_context(request: HttpRequest) -> dict:
 
 def _scope_by_empresa(request: HttpRequest, queryset, field: str = "empresa"):
     empresas = get_user_empresas(request.user)
-    requested_slug = request.GET.get("empresa", "").strip()
-    if requested_slug:
-        selected = empresas.filter(slug=requested_slug).first()
-        if selected:
-            request.active_empresa = selected
-            return queryset.filter(**{field: selected})
-    return queryset.filter(**{f"{field}__in": empresas})
+    requested_slug = request.GET.get("empresa", "").strip() or request.session.get("active_empresa_slug", "")
+    selected = get_active_empresa_for_user(request.user, requested_slug)
+    if selected and empresas.filter(pk=selected.pk).exists():
+        request.active_empresa = selected
+        request.session["active_empresa_slug"] = selected.slug
+        return queryset.filter(**{field: selected})
+    return queryset.none()
 
 
 def _get_scoped_hoja_or_404(request: HttpRequest, oid: str, empresa_slug: str = "") -> HojaRuta:
-    qs = _scope_by_empresa(request, HojaRuta.objects.select_related("empresa"))
     if empresa_slug:
-        qs = qs.filter(empresa__slug=empresa_slug)
+        empresas = get_user_empresas(request.user)
+        empresa = get_object_or_404(empresas, slug=empresa_slug)
+        request.active_empresa = empresa
+        request.session["active_empresa_slug"] = empresa.slug
+        return get_object_or_404(HojaRuta.objects.select_related("empresa").filter(empresa=empresa), oid=oid)
+
+    qs = _scope_by_empresa(request, HojaRuta.objects.select_related("empresa"))
     hoja = qs.filter(oid=oid).order_by("empresa__name").first()
     if not hoja:
         return get_object_or_404(qs, oid=oid)
@@ -393,7 +401,10 @@ def panel_crear_usuario(request: HttpRequest) -> HttpResponse:
 @user_passes_test(can_manage_users)
 def panel_usuarios(request: HttpRequest) -> HttpResponse:
     users = User.objects.order_by("username")
-    rows = [{"user": user, "profile": get_or_create_profile(user)} for user in users]
+    rows = []
+    for user in users:
+        profile = get_or_create_profile(user)
+        rows.append({"user": user, "profile": profile, "empresas": profile.empresas.order_by("name")})
     return render(
         request,
         "tracking/panel_usuarios.html",
@@ -411,6 +422,7 @@ def panel_permisos(request: HttpRequest) -> HttpResponse:
     acciones = [
         ("Importar PDF", "can_import_pdf"),
         ("Revisar y validar evidencias", "can_review_evidence"),
+        ("Auditoria de remitos", "can_audit_remitos"),
         ("Cerrar hoja", "can_close_hoja"),
         ("Gestionar usuarios", "can_manage_users"),
         ("Compartir link logistica", "share_logistica_default"),
@@ -525,6 +537,7 @@ def panel_home(request: HttpRequest) -> HttpResponse:
             "can_import_pdf": can_import_pdf(request.user),
             "can_export_excel": can_import_pdf(request.user),
             "can_review_evidence": can_review_evidence(request.user),
+            "can_audit_remitos": can_audit_remitos(request.user),
             "can_manage_users": can_manage_users(request.user),
             "can_close_hoja": can_close_hoja(request.user),
         },
@@ -724,7 +737,7 @@ def panel_evidencias(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
-    if not can_review_evidence(request.user):
+    if not can_audit_remitos(request.user):
         messages.error(request, "No tenes permisos para revisar auditoría de remitos.")
         return redirect("panel-home")
 
@@ -777,7 +790,7 @@ def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def panel_auditoria_remito_detalle(request: HttpRequest, remito_id: int) -> HttpResponse:
-    if not can_review_evidence(request.user):
+    if not can_audit_remitos(request.user):
         messages.error(request, "No tenes permisos para revisar auditoría de remitos.")
         return redirect("panel-home")
 
