@@ -39,7 +39,7 @@ from .services.authz import (
 from .services.admin_ops import cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
 from .services.conformados import registrar_evidencia, registrar_intento_acceso_portal, registrar_intento_no_entregado
 from .services.email_alerts import send_public_access_alert
-from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_text_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf
+from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_page_texts_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf_pages
 from .services.import_tabular import import_tabular_file, parse_tabular_file
 
 REMITO_MANUAL_PATTERN = re.compile(r"^\d{5}-\d{8}$")
@@ -799,9 +799,9 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
             if form.is_valid():
                 pdf_file = form.cleaned_data["pdf_file"]
                 try:
-                    text = extract_text_from_pdf(pdf_file)
+                    page_texts = extract_page_texts_from_pdf(pdf_file)
                     oid = extract_oid_from_qr(pdf_file)
-                    parsed = parse_hoja_ruta_pdf(text, oid=oid)
+                    parsed = parse_hoja_ruta_pdf_pages(page_texts, oid=oid)
                     _validate_parsed_hoja(parsed)
                 except Exception as exc:
                     form.add_error("pdf_file", str(exc))

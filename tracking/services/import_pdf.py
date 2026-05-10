@@ -79,6 +79,11 @@ def _read_pdf_bytes(pdf_file: Any) -> bytes:
 
 
 def extract_text_from_pdf(pdf_file: Any) -> str:
+    page_texts = extract_page_texts_from_pdf(pdf_file)
+    return "\n".join(page_texts).strip()
+
+
+def extract_page_texts_from_pdf(pdf_file: Any) -> list[str]:
     pdf_bytes = _read_pdf_bytes(pdf_file)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     parts: list[str] = []
@@ -86,7 +91,7 @@ def extract_text_from_pdf(pdf_file: Any) -> str:
         text = page.get_text("text")
         if text:
             parts.append(text)
-    return "\n".join(parts).strip()
+    return parts
 
 
 def _decode_qr_from_page(page: fitz.Page) -> list[str]:
@@ -124,7 +129,7 @@ def _decode_qr_from_page(page: fitz.Page) -> list[str]:
     return list(dict.fromkeys(decoded))
 
 
-def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
+def _extract_oid_candidates_from_pdf(pdf_file: Any) -> set[uuid.UUID]:
     pdf_bytes = _read_pdf_bytes(pdf_file)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
@@ -138,12 +143,35 @@ def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
         candidates.extend(CANAL_PATH_PATTERN.findall(page_text))
         candidates.extend(_decode_qr_from_page(page))
 
+    found: set[uuid.UUID] = set()
     for candidate in candidates:
-        match = OID_PATTERN.search(candidate) or CANAL_PATH_PATTERN.search(candidate)
-        if match:
-            return uuid.UUID(match.group("oid"))
+        canal_match = CANAL_PATH_PATTERN.search(candidate)
+        if canal_match:
+            found.add(uuid.UUID(canal_match.group("oid")))
+            continue
 
-    raise ValueError("No se pudo extraer el oid desde el QR del PDF.")
+        uuid_match = OID_PATTERN.search(candidate)
+        if uuid_match:
+            found.add(uuid.UUID(uuid_match.group("oid")))
+
+    return found
+
+
+def extract_oid_from_qr(pdf_file: Any) -> uuid.UUID:
+    candidates = _extract_oid_candidates_from_pdf(pdf_file)
+
+    if not candidates:
+        raise ValueError("No se pudo extraer el oid desde el QR del PDF.")
+
+    if len(candidates) > 1:
+        oids = ", ".join(sorted(str(value) for value in candidates))
+        raise ValueError(
+            "El PDF contiene mas de un OID de hoja de ruta. "
+            "Subi un archivo que corresponda a una sola hoja. "
+            f"OID detectados: {oids}."
+        )
+
+    return next(iter(candidates))
 
 
 def _normalize_value(value: Any) -> str:
@@ -428,25 +456,35 @@ def _validate_parsed_hoja(parsed: dict[str, Any]) -> None:
 
 
 def parse_hoja_ruta_pdf(text: str, oid: uuid.UUID | None = None) -> dict[str, Any]:
+    return parse_hoja_ruta_pdf_pages([text], oid=oid)
+
+
+def parse_hoja_ruta_pdf_pages(page_texts: list[str], oid: uuid.UUID | None = None) -> dict[str, Any]:
+    if not page_texts:
+        raise ValueError("No se pudo leer contenido del PDF.")
+
+    header_text = page_texts[0]
+    remitos_text = "\n".join(page_texts)
+
     header = {
-        "nro_entrega": _extract_labelled_value(text, "nro_entrega"),
-        "fecha": _extract_date_value(text),
-        "transporte_tipo": _extract_labelled_value(text, "transporte_tipo"),
-        "flete": _extract_labelled_value(text, "flete"),
-        "chofer": _extract_labelled_value(text, "chofer"),
-        "acompanante": _extract_labelled_value(text, "acompanante"),
-        "transporte": _extract_labelled_value(text, "transporte"),
+        "nro_entrega": _extract_labelled_value(header_text, "nro_entrega"),
+        "fecha": _extract_date_value(header_text),
+        "transporte_tipo": _extract_labelled_value(header_text, "transporte_tipo"),
+        "flete": _extract_labelled_value(header_text, "flete"),
+        "chofer": _extract_labelled_value(header_text, "chofer"),
+        "acompanante": _extract_labelled_value(header_text, "acompanante"),
+        "transporte": _extract_labelled_value(header_text, "transporte"),
     }
 
     if not header["transporte_tipo"]:
-        header["transporte_tipo"] = _infer_transporte_tipo(text)
+        header["transporte_tipo"] = _infer_transporte_tipo(header_text)
 
     if not header["nro_entrega"]:
-        first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+        first_line = next((line.strip() for line in header_text.splitlines() if line.strip()), "")
         header["nro_entrega"] = first_line
 
     parsed_date = _parse_date(header["fecha"]) if header["fecha"] else None
-    remitos = _extract_remitos(text)
+    remitos = _extract_remitos(remitos_text)
 
     return {
         "oid": oid,
@@ -515,8 +553,8 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
 
 @transaction.atomic
 def import_hoja_ruta_pdf(pdf_file: Any) -> HojaRuta:
-    text = extract_text_from_pdf(pdf_file)
+    page_texts = extract_page_texts_from_pdf(pdf_file)
     oid = extract_oid_from_qr(pdf_file)
-    parsed = parse_hoja_ruta_pdf(text, oid=oid)
+    parsed = parse_hoja_ruta_pdf_pages(page_texts, oid=oid)
     _validate_parsed_hoja(parsed)
     return _import_parsed_hoja(parsed, pdf_file)

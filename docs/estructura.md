@@ -205,7 +205,8 @@ Configuracion de la app `tracking`.
 Servicio de importacion y parseo de PDF de Hoja de Ruta.
 
 - `extract_text_from_pdf(...)`: obtiene texto plano del PDF.
-- `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida, priorizando QR/link de hoja sobre UUID visibles de remitos.
+- `extract_page_texts_from_pdf(...)`: obtiene texto por pagina para separar cabecera y remitos en importaciones multipagina.
+- `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida; rechaza PDFs con multiples OID de hoja y falla si no detecta ninguno.
 - `_decode_qr_from_page(...)`: intenta decodificar QR con varios niveles de resolucion y escala de grises para PDFs donde el QR sale chico.
 - `_extract_labelled_value(...)`: extrae cabeceras por etiqueta (nro, flete, chofer, acompanante, transporte) con fallback de linea siguiente.
 - `_extract_labelled_value(...)`: evita tomar la linea siguiente como valor cuando una etiqueta viene vacia, como `Transporte Tipo:` antes de `Peso Total:`.
@@ -216,6 +217,7 @@ Servicio de importacion y parseo de PDF de Hoja de Ruta.
 - `_extract_remitos(...)`: interpreta filas de la tabla de remitos a partir de la linea con fecha + remito; extrae fecha individual de cada remito.
 - `_extract_remitos(...)`: soporta tambien tablas PDF donde cada columna llega en lineas separadas (`oid`, fecha, cliente, remito, direccion).
 - `parse_hoja_ruta_pdf(...)`: interpreta los datos visibles de la hoja y remitos, incluida fecha de envio por remito.
+- `parse_hoja_ruta_pdf_pages(...)`: usa solo la primera pagina para cabecera (chofer/transporte/etc.) y concatena todas las paginas para extraer remitos.
 - `_validate_parsed_hoja(...)`: valida OID, fecha, cantidad minima y campos obligatorios de remitos.
 - `_import_parsed_hoja(...)`: crea o actualiza `HojaRuta`, actualiza remitos existentes por `remito_uid` o por `numero` para incorporar OID de remito en reimportaciones; asigna `Remito.fecha` desde datos extraidos.
 - `import_hoja_ruta_pdf(...)`: crea o actualiza `HojaRuta`, `Remito` y eventos de trazabilidad.
