@@ -24,7 +24,7 @@ from django.utils.dateparse import parse_date
 from django.db.models.functions import TruncDate
 
 from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
-from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
+from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
 from .services.authz import (
     can_close_hoja,
     can_grant_staff,
@@ -33,8 +33,11 @@ from .services.authz import (
     can_review_evidence,
     create_user_with_profile,
     delete_user_and_profile,
+    get_active_empresa_for_user,
     get_or_create_profile,
+    get_user_empresas,
     update_user_with_profile,
+    user_can_access_empresa,
 )
 from .services.admin_ops import cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
 from .services.conformados import registrar_evidencia, registrar_intento_acceso_portal, registrar_intento_no_entregado
@@ -48,6 +51,7 @@ OID_PATTERN = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 PDF_EXTENSIONS = {".pdf"}
 IMPORT_PREVIEW_SESSION_KEY = "import_preview_files"
+PUBLIC_CHANNELS = {"logistica", "cliente", "interno"}
 
 
 def _normalize_code(value: str) -> str:
@@ -86,6 +90,57 @@ def _evidencia_limits_context() -> dict[str, int]:
     }
 
 
+def _empresas_context(request: HttpRequest) -> dict:
+    empresas = get_user_empresas(request.user)
+    active = get_active_empresa_for_user(request.user, request.GET.get("empresa", ""))
+    if active:
+        request.active_empresa = active
+    return {
+        "empresas_usuario": empresas,
+        "empresa_activa": active,
+        "empresa_slug": active.slug if active else "",
+    }
+
+
+def _scope_by_empresa(request: HttpRequest, queryset, field: str = "empresa"):
+    empresas = get_user_empresas(request.user)
+    requested_slug = request.GET.get("empresa", "").strip()
+    if requested_slug:
+        selected = empresas.filter(slug=requested_slug).first()
+        if selected:
+            request.active_empresa = selected
+            return queryset.filter(**{field: selected})
+    return queryset.filter(**{f"{field}__in": empresas})
+
+
+def _get_scoped_hoja_or_404(request: HttpRequest, oid: str, empresa_slug: str = "") -> HojaRuta:
+    qs = _scope_by_empresa(request, HojaRuta.objects.select_related("empresa"))
+    if empresa_slug:
+        qs = qs.filter(empresa__slug=empresa_slug)
+    hoja = qs.filter(oid=oid).order_by("empresa__name").first()
+    if not hoja:
+        return get_object_or_404(qs, oid=oid)
+    request.active_empresa = hoja.empresa
+    return hoja
+
+
+def _resolve_public_empresa_canal(canal_segment: str) -> tuple[Empresa | None, str]:
+    raw = (canal_segment or "").strip().lower()
+    for canal in PUBLIC_CHANNELS:
+        suffix = f"-{canal}"
+        if raw.endswith(suffix):
+            empresa_slug = raw[: -len(suffix)]
+            empresa = Empresa.objects.filter(slug=empresa_slug, active=True).first()
+            if not empresa:
+                return None, ""
+            return empresa, canal
+    return None, raw
+
+
+def _public_canal_segment(empresa: Empresa, canal: str) -> str:
+    return f"{empresa.slug}-{canal}"
+
+
 def _parse_dashboard_date(value: str | None, default: date) -> date:
     parsed = parse_date(value or "") if value else None
     return parsed or default
@@ -121,7 +176,7 @@ def _hojas_filtradas_context(request: HttpRequest, *, usar_fechas: bool = True) 
         desde_dt, _ = _date_bounds(desde)
         _, hasta_dt = _date_bounds(hasta)
 
-    hojas_qs = HojaRuta.objects.annotate(
+    hojas_qs = HojaRuta.objects.select_related("empresa").annotate(
         remitos_total=Count("remitos", distinct=True),
         remitos_conformados=Count(
             "remitos",
@@ -134,6 +189,7 @@ def _hojas_filtradas_context(request: HttpRequest, *, usar_fechas: bool = True) 
             distinct=True,
         ),
     ).order_by("-created_at")
+    hojas_qs = _scope_by_empresa(request, hojas_qs)
     if desde_dt and hasta_dt:
         hojas_qs = hojas_qs.filter(created_at__range=(desde_dt, hasta_dt))
     if estado:
@@ -317,6 +373,8 @@ def panel_crear_usuario(request: HttpRequest) -> HttpResponse:
                     email=form.cleaned_data.get("email", ""),
                     password=form.cleaned_data["password1"],
                     rol=form.cleaned_data["rol"],
+                    empresa_principal=form.cleaned_data["empresa_principal"],
+                    empresas=list(form.cleaned_data["empresas"]),
                     share_logistica=bool(form.cleaned_data.get("share_logistica")),
                     share_cliente=bool(form.cleaned_data.get("share_cliente")),
                 )
@@ -388,6 +446,8 @@ def panel_editar_usuario(request: HttpRequest, user_id: int) -> HttpResponse:
                     username=form.cleaned_data["username"],
                     email=form.cleaned_data.get("email", ""),
                     rol=form.cleaned_data["rol"],
+                    empresa_principal=form.cleaned_data["empresa_principal"],
+                    empresas=list(form.cleaned_data["empresas"]),
                     share_logistica=bool(form.cleaned_data.get("share_logistica")),
                     share_cliente=bool(form.cleaned_data.get("share_cliente")),
                     is_active=bool(form.cleaned_data.get("is_active")),
@@ -405,6 +465,8 @@ def panel_editar_usuario(request: HttpRequest, user_id: int) -> HttpResponse:
                 "username": usuario.username,
                 "email": usuario.email,
                 "rol": profile.rol,
+                "empresa_principal": profile.empresa_principal,
+                "empresas": profile.empresas.all(),
                 "share_logistica": profile.share_logistica,
                 "share_cliente": profile.share_cliente,
                 "is_active": usuario.is_active,
@@ -488,8 +550,10 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         fecha_evento__range=(desde_dt, hasta_dt),
         motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
     )
+    accesos_inexistentes = _scope_by_empresa(request, accesos_inexistentes)
 
     hojas_grafico_qs = HojaRuta.objects.filter(created_at__range=(desde_dt, hasta_dt))
+    hojas_grafico_qs = _scope_by_empresa(request, hojas_grafico_qs)
     if estado:
         hojas_grafico_qs = hojas_grafico_qs.filter(estado=estado)
     if q:
@@ -559,13 +623,14 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
         fecha_evento__range=(desde_dt, hasta_dt),
         motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
     ).order_by("-fecha_evento")
+    intentos_qs = _scope_by_empresa(request, intentos_qs)
     if q:
         intentos_qs = intentos_qs.filter(oid__icontains=q)
     if canal:
         intentos_qs = intentos_qs.filter(canal=canal)
 
     canales = (
-        IntentoAccesoPortal.objects.filter(motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE)
+        _scope_by_empresa(request, IntentoAccesoPortal.objects.filter(motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE))
         .exclude(canal="")
         .values_list("canal", flat=True)
         .distinct()
@@ -589,8 +654,8 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-def panel_hoja_detalle(request: HttpRequest, oid: str) -> HttpResponse:
-    hoja = get_object_or_404(HojaRuta, oid=oid)
+def panel_hoja_detalle(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpResponse:
+    hoja = _get_scoped_hoja_or_404(request, oid, empresa_slug)
     remito_estado = request.GET.get("remito_estado", "").strip()
     q = request.GET.get("q", "").strip()
 
@@ -604,8 +669,8 @@ def panel_hoja_detalle(request: HttpRequest, oid: str) -> HttpResponse:
     evidencias = Evidencia.objects.filter(hoja_ruta=hoja).select_related("remito").order_by("-fecha_carga")[:30]
     intentos = hoja.intentos.select_related("remito").order_by("-fecha_evento")[:30]
     profile = get_or_create_profile(request.user)
-    logistica_url = request.build_absolute_uri(f"/conformados/logistica/{hoja.oid}/")
-    cliente_url = request.build_absolute_uri(f"/conformados/cliente/{hoja.oid}/")
+    logistica_url = request.build_absolute_uri(f"/conformados/{_public_canal_segment(hoja.empresa, 'logistica')}/{hoja.oid}/")
+    cliente_url = request.build_absolute_uri(f"/conformados/{_public_canal_segment(hoja.empresa, 'cliente')}/{hoja.oid}/")
     return render(
         request,
         "tracking/panel_hoja_detalle.html",
@@ -635,7 +700,10 @@ def panel_evidencias(request: HttpRequest) -> HttpResponse:
     remito_q = request.GET.get("remito", "").strip()
     estado = request.GET.get("estado", "").strip()
 
-    evidencias_qs = Evidencia.objects.select_related("hoja_ruta", "remito").order_by("-fecha_carga")
+    evidencias_qs = _scope_by_empresa(
+        request,
+        Evidencia.objects.select_related("empresa", "hoja_ruta", "remito").order_by("-fecha_carga"),
+    )
     if remito_q:
         evidencias_qs = evidencias_qs.filter(remito__numero__icontains=remito_q)
     if estado:
@@ -666,7 +734,7 @@ def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
     hoja = request.GET.get("hoja", "").strip()
 
     remitos_qs = (
-        Remito.objects.select_related("hoja_ruta")
+        _scope_by_empresa(request, Remito.objects.select_related("empresa", "hoja_ruta"))
         .annotate(
             evidencias_total=Count("evidencias", distinct=True),
             intentos_total=Count("intentos", distinct=True),
@@ -713,7 +781,8 @@ def panel_auditoria_remito_detalle(request: HttpRequest, remito_id: int) -> Http
         messages.error(request, "No tenes permisos para revisar auditoría de remitos.")
         return redirect("panel-home")
 
-    remito = get_object_or_404(Remito.objects.select_related("hoja_ruta"), pk=remito_id)
+    remito = get_object_or_404(_scope_by_empresa(request, Remito.objects.select_related("empresa", "hoja_ruta")), pk=remito_id)
+    request.active_empresa = remito.empresa
     evidencias = list(remito.evidencias.select_related("hoja_ruta", "remito").order_by("-fecha_carga"))
     intentos = list(remito.intentos.select_related("hoja_ruta", "remito").order_by("-fecha_evento"))
     timeline_qs = (
@@ -774,15 +843,19 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
     preview = None
     preview_token = ""
     preview_file_name = ""
+    empresas = get_user_empresas(request.user)
     if request.method == "POST":
         action = request.POST.get("action", "preview")
         token = request.POST.get("preview_token", "").strip()
 
         if action == "import" and token and "pdf_file" not in request.FILES:
-            form = ImportPdfForm()
+            form = ImportPdfForm(empresas=empresas)
             try:
+                empresa = empresas.filter(pk=request.POST.get("empresa")).first()
+                if not empresa:
+                    raise ValueError("Selecciona una empresa valida para importar.")
                 with _open_import_preview_file(request, token, "pdf") as pdf_file:
-                    hoja = import_hoja_ruta_pdf(pdf_file)
+                    hoja = import_hoja_ruta_pdf(pdf_file, empresa=empresa)
             except Exception as exc:
                 form.add_error("pdf_file", str(exc))
                 preview_token = token
@@ -795,8 +868,9 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
                 messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
                 return redirect("panel-home")
         else:
-            form = ImportPdfForm(request.POST, request.FILES)
+            form = ImportPdfForm(request.POST, request.FILES, empresas=empresas)
             if form.is_valid():
+                empresa = form.cleaned_data["empresa"]
                 pdf_file = form.cleaned_data["pdf_file"]
                 try:
                     page_texts = extract_page_texts_from_pdf(pdf_file)
@@ -807,7 +881,7 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
                     form.add_error("pdf_file", str(exc))
                 else:
                     if action == "import":
-                        hoja = import_hoja_ruta_pdf(pdf_file)
+                        hoja = import_hoja_ruta_pdf(pdf_file, empresa=empresa)
                         messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
                         return redirect("panel-home")
 
@@ -815,7 +889,7 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
                     preview_token = _save_import_preview_file(request, pdf_file, "pdf")
                     preview_file_name = Path(pdf_file.name or "").name
     else:
-        form = ImportPdfForm()
+        form = ImportPdfForm(empresas=empresas)
 
     return render(
         request,
@@ -833,15 +907,19 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
     preview = None
     preview_token = ""
     preview_file_name = ""
+    empresas = get_user_empresas(request.user)
     if request.method == "POST":
         action = request.POST.get("action", "preview")
         token = request.POST.get("preview_token", "").strip()
 
         if action == "import" and token and "archivo" not in request.FILES:
-            form = ImportSpreadsheetForm()
+            form = ImportSpreadsheetForm(empresas=empresas)
             try:
+                empresa = empresas.filter(pk=request.POST.get("empresa")).first()
+                if not empresa:
+                    raise ValueError("Selecciona una empresa valida para importar.")
                 with _open_import_preview_file(request, token, "tabular") as archivo:
-                    hojas, remitos = import_tabular_file(archivo, archivo)
+                    hojas, remitos = import_tabular_file(archivo, archivo, empresa=empresa)
             except Exception as exc:
                 form.add_error("archivo", str(exc))
                 preview_token = token
@@ -854,8 +932,9 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
                 messages.success(request, f"Importacion completada: {hojas} hoja(s), {remitos} remito(s).")
                 return redirect("panel-home")
         else:
-            form = ImportSpreadsheetForm(request.POST, request.FILES)
+            form = ImportSpreadsheetForm(request.POST, request.FILES, empresas=empresas)
             if form.is_valid():
+                empresa = form.cleaned_data["empresa"]
                 archivo = form.cleaned_data["archivo"]
                 try:
                     parsed = parse_tabular_file(archivo)
@@ -864,7 +943,7 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
                     form.add_error("archivo", str(exc))
                 else:
                     if action == "import":
-                        hojas, remitos = import_tabular_file(archivo, archivo)
+                        hojas, remitos = import_tabular_file(archivo, archivo, empresa=empresa)
                         messages.success(request, f"Importacion completada: {hojas} hoja(s), {remitos} remito(s).")
                         return redirect("panel-home")
 
@@ -872,7 +951,7 @@ def panel_importar_excel(request: HttpRequest) -> HttpResponse:
                     preview_token = _save_import_preview_file(request, archivo, "tabular")
                     preview_file_name = Path(archivo.name or "").name
     else:
-        form = ImportSpreadsheetForm()
+        form = ImportSpreadsheetForm(empresas=empresas)
 
     return render(
         request,
@@ -893,7 +972,7 @@ def _panel_exportar_excel_detallado_legacy(request: HttpRequest) -> HttpResponse
     ws_default.title = "Info"
 
     # Obtener todas las hojas de ruta
-    hojas = HojaRuta.objects.all().prefetch_related("remitos", "evidencias").order_by("-created_at")
+    hojas = _scope_by_empresa(request, HojaRuta.objects.all()).prefetch_related("remitos", "evidencias").order_by("-created_at")
 
     # Estilos
     header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
@@ -1015,7 +1094,7 @@ def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
     if desde and hasta and desde > hasta:
         desde, hasta = hasta, desde
 
-    hojas = HojaRuta.objects.annotate(
+    hojas = _scope_by_empresa(request, HojaRuta.objects.annotate(
         remitos_total=Count("remitos", distinct=True),
         remitos_con_evidencia=Count("remitos__evidencias__remito", distinct=True),
         remitos_evidencia_aprobada=Count(
@@ -1033,7 +1112,7 @@ def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
             filter=Q(evidencias__estado_validacion=Evidencia.EstadoValidacion.RECHAZADA),
             distinct=True,
         ),
-    ).order_by("-created_at")
+    )).order_by("-created_at")
     if desde:
         desde_dt, _ = _date_bounds(desde)
         hojas = hojas.filter(created_at__gte=desde_dt)
@@ -1135,6 +1214,10 @@ def panel_exportar_excel(request: HttpRequest) -> HttpResponse:
 
 
 def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
+    empresa, canal_real = _resolve_public_empresa_canal(canal)
+    if canal_real not in PUBLIC_CHANNELS:
+        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+    canal = canal_real
     oid_text = str(oid).strip()
 
     if not OID_PATTERN.fullmatch(oid_text):
@@ -1151,6 +1234,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
             canal=canal,
             oid=oid_text,
             motivo="oid_invalido",
+            empresa=empresa,
             ip_address=_get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
             path=request.get_full_path()[:255],
@@ -1158,12 +1242,16 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
         )
         return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid_text})
 
-    hoja = HojaRuta.objects.filter(oid=oid_text).first()
+    hojas = HojaRuta.objects.select_related("empresa").filter(oid=oid_text)
+    if empresa:
+        hojas = hojas.filter(empresa=empresa)
+    hoja = hojas.first()
     if not hoja:
         intento = registrar_intento_acceso_portal(
             canal=canal,
             oid=oid_text,
             motivo="hoja_inexistente",
+            empresa=empresa,
             ip_address=_get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", "")[:500],
             path=request.get_full_path()[:255],
@@ -1174,6 +1262,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
         except Exception:
             pass
         return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid_text})
+    request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid_text})
 
@@ -1206,6 +1295,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
             "evidencia_form": EvidenciaForm(),
             "no_entregado_form": NoEntregadoForm(),
             "canal": canal,
+            "public_canal_segment": _public_canal_segment(hoja.empresa, canal),
             "remito_query": remito_query,
             "remito_origen": remito_origen,
             "remito_seleccionado": remito_seleccionado,
@@ -1218,7 +1308,17 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
 
 
 def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
-    hoja = get_object_or_404(HojaRuta, oid=oid)
+    empresa, canal_real = _resolve_public_empresa_canal(canal)
+    if canal_real not in PUBLIC_CHANNELS:
+        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+    canal = canal_real
+    hoja_qs = HojaRuta.objects.select_related("empresa").filter(oid=oid)
+    if empresa:
+        hoja_qs = hoja_qs.filter(empresa=empresa)
+    hoja = hoja_qs.order_by("empresa__name").first()
+    if not hoja:
+        hoja = get_object_or_404(hoja_qs)
+    request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
 
@@ -1228,7 +1328,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     except ValueError as exc:
         messages.error(request, str(exc))
         remito_query = request.POST.get("remito_uid", "").strip()
-        return redirect(f"/conformados/{canal}/{oid}/?remito={remito_query}&modo=evidencia")
+        return redirect(f"/conformados/{_public_canal_segment(hoja.empresa, canal)}/{oid}/?remito={remito_query}&modo=evidencia")
 
     if form.is_valid():
         try:
@@ -1239,7 +1339,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             )
         except ValueError as exc:
             messages.error(request, str(exc))
-            return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=evidencia")
+            return redirect(f"/conformados/{_public_canal_segment(hoja.empresa, canal)}/{oid}/?remito={remito.numero}&modo=evidencia")
 
         try:
             registrar_evidencia(
@@ -1255,7 +1355,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             form.add_error(None, str(exc))
         else:
             messages.success(request, "Evidencia cargada correctamente.")
-            return redirect("conformados-portal", canal=canal, oid=oid)
+            return redirect("conformados-portal", canal=_public_canal_segment(hoja.empresa, canal), oid=oid)
 
     remitos = hoja.remitos.order_by("id")
     return render(
@@ -1267,6 +1367,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "evidencia_form": form,
             "no_entregado_form": NoEntregadoForm(),
             "canal": canal,
+            "public_canal_segment": _public_canal_segment(hoja.empresa, canal),
             "remito_query": remito.numero,
             "remito_origen": "manual",
             "remito_seleccionado": remito,
@@ -1279,7 +1380,17 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
 
 
 def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
-    hoja = get_object_or_404(HojaRuta, oid=oid)
+    empresa, canal_real = _resolve_public_empresa_canal(canal)
+    if canal_real not in PUBLIC_CHANNELS:
+        return render(request, "tracking/estado_hoja.html", {"estado": "inexistente", "canal": canal, "oid": oid})
+    canal = canal_real
+    hoja_qs = HojaRuta.objects.select_related("empresa").filter(oid=oid)
+    if empresa:
+        hoja_qs = hoja_qs.filter(empresa=empresa)
+    hoja = hoja_qs.order_by("empresa__name").first()
+    if not hoja:
+        hoja = get_object_or_404(hoja_qs)
+    request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
 
@@ -1289,7 +1400,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     except ValueError as exc:
         messages.error(request, str(exc))
         remito_query = request.POST.get("remito_uid", "").strip()
-        return redirect(f"/conformados/{canal}/{oid}/?remito={remito_query}&modo=no_entregado")
+        return redirect(f"/conformados/{_public_canal_segment(hoja.empresa, canal)}/{oid}/?remito={remito_query}&modo=no_entregado")
 
     if form.is_valid():
         try:
@@ -1300,7 +1411,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             )
         except ValueError as exc:
             messages.error(request, str(exc))
-            return redirect(f"/conformados/{canal}/{oid}/?remito={remito.numero}&modo=no_entregado")
+            return redirect(f"/conformados/{_public_canal_segment(hoja.empresa, canal)}/{oid}/?remito={remito.numero}&modo=no_entregado")
 
         try:
             registrar_intento_no_entregado(
@@ -1314,7 +1425,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             form.add_error(None, str(exc))
         else:
             messages.success(request, "Intento de no entrega registrado.")
-            return redirect("conformados-portal", canal=canal, oid=oid)
+            return redirect("conformados-portal", canal=_public_canal_segment(hoja.empresa, canal), oid=oid)
 
     remitos = hoja.remitos.order_by("id")
     return render(
@@ -1326,6 +1437,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "evidencia_form": EvidenciaForm(),
             "no_entregado_form": form,
             "canal": canal,
+            "public_canal_segment": _public_canal_segment(hoja.empresa, canal),
             "remito_query": remito.numero,
             "remito_origen": "manual",
             "remito_seleccionado": remito,
@@ -1343,7 +1455,11 @@ def validar_evidencia(request: HttpRequest, evidencia_id: int) -> HttpResponse:
         messages.error(request, "No tenes permisos para validar evidencias.")
         return redirect("panel-home")
 
-    evidencia = get_object_or_404(Evidencia.objects.select_related("hoja_ruta", "remito"), pk=evidencia_id)
+    evidencia = get_object_or_404(
+        _scope_by_empresa(request, Evidencia.objects.select_related("empresa", "hoja_ruta", "remito")),
+        pk=evidencia_id,
+    )
+    request.active_empresa = evidencia.empresa
     if request.method == "POST":
         form = ValidacionEvidenciaForm(request.POST)
         if form.is_valid():
@@ -1369,12 +1485,12 @@ def validar_evidencia(request: HttpRequest, evidencia_id: int) -> HttpResponse:
 
 
 @login_required
-def cerrar_hoja(request: HttpRequest, oid: str) -> HttpResponse:
+def cerrar_hoja(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpResponse:
     if not can_close_hoja(request.user):
         messages.error(request, "No tenes permisos para cerrar hojas.")
         return redirect("panel-home")
 
-    hoja = get_object_or_404(HojaRuta, oid=oid)
+    hoja = _get_scoped_hoja_or_404(request, oid, empresa_slug)
     remitos_pendientes = hoja.remitos.exclude(
         estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)
     ).count()

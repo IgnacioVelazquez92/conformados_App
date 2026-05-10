@@ -8,6 +8,7 @@ from typing import Any, Iterable
 
 from openpyxl import load_workbook
 
+from tracking.models import Empresa
 from tracking.services.import_pdf import RemitoData, _import_parsed_hoja, _normalize_value, _parse_date, _validate_parsed_hoja
 
 TABULAR_REQUIRED_COLUMNS = {
@@ -188,7 +189,7 @@ def parse_xlsx_file(file_obj: Any) -> dict[str, Any]:
     return _build_parsed_from_rows(rows)
 
 
-def import_tabular_file(file_obj: Any, original_file: Any) -> tuple[int, int]:
+def import_tabular_file(file_obj: Any, original_file: Any, *, empresa: Empresa) -> tuple[int, int]:
     parsed = parse_tabular_file(file_obj)
 
     if hasattr(original_file, "seek"):
@@ -197,7 +198,7 @@ def import_tabular_file(file_obj: Any, original_file: Any) -> tuple[int, int]:
         except Exception:
             pass
 
-    hoja = _import_parsed_hoja(parsed, original_file)
+    hoja = _import_parsed_hoja(parsed, original_file, empresa)
     return 1, hoja.remitos.count()
 
 

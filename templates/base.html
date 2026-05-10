@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>{% block title %}Conformados{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static bootstrap_css_path %}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
     {% block extra_head %}{% endblock %}
@@ -15,7 +15,7 @@
         <div class="container brand-shell">
             <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/dashboard/">
                 <i class="bi bi-box-seam"></i>
-                <span>PharmaCenter Conformados</span>
+                <span>{{ brand_name }}</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Abrir menu">
                 <span class="navbar-toggler-icon"></span>
@@ -23,6 +23,18 @@
             <div class="collapse navbar-collapse" id="mainNavbar">
                 <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
                     {% if request.user.is_authenticated %}
+                        {% if empresas_usuario|length > 1 %}
+                            <form class="d-flex align-items-center" method="get" action="{{ request.path }}">
+                                <label class="visually-hidden" for="empresa-navbar">Empresa</label>
+                                <select id="empresa-navbar" class="form-select form-select-sm" name="empresa" onchange="this.form.submit()">
+                                    {% for empresa in empresas_usuario %}
+                                        <option value="{{ empresa.slug }}" {% if active_empresa and active_empresa.slug == empresa.slug %}selected{% endif %}>{{ empresa.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </form>
+                        {% elif active_empresa %}
+                            <span class="navbar-text text-secondary">{{ active_empresa.name }}</span>
+                        {% endif %}
                         <a class="nav-link" href="/dashboard/">Dashboard</a>
                         <a class="nav-link" href="/panel/">Panel</a>
                         <a class="nav-link" href="/panel/evidencias/">Evidencias</a>

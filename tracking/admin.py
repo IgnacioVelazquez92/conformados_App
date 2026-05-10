@@ -1,6 +1,15 @@
 from django.contrib import admin
 
-from .models import Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, PublicAlertRecipient, Remito, RoleDefinition, UserProfile
+from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, PublicAlertRecipient, Remito, RoleDefinition, UserProfile
+
+
+@admin.register(Empresa)
+class EmpresaAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "slug", "active", "theme_css", "updated_at")
+    list_filter = ("active",)
+    search_fields = ("name", "code", "slug", "erp_identifier")
+    prepopulated_fields = {"slug": ("name",)}
+    readonly_fields = ("created_at", "updated_at")
 
 
 class RemitoInline(admin.TabularInline):
@@ -39,6 +48,7 @@ class EventoTrazabilidadInline(admin.TabularInline):
 class HojaRutaAdmin(admin.ModelAdmin):
     list_display = (
         "oid",
+        "empresa",
         "nro_entrega",
         "fecha",
         "estado",
@@ -51,13 +61,13 @@ class HojaRutaAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-    list_filter = ("estado", "fecha", "transporte_tipo", "created_at")
-    search_fields = ("oid", "nro_entrega", "chofer", "transporte")
+    list_filter = ("empresa", "estado", "fecha", "transporte_tipo", "created_at")
+    search_fields = ("oid", "nro_entrega", "chofer", "transporte", "empresa__name", "empresa__code")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         (
             "Identificacion",
-            {"fields": ("oid", "nro_entrega", "fecha", "estado", "archivo_pdf_original")},
+            {"fields": ("empresa", "oid", "nro_entrega", "fecha", "estado", "archivo_pdf_original")},
         ),
         (
             "Transporte",
@@ -73,8 +83,8 @@ class HojaRutaAdmin(admin.ModelAdmin):
 
 @admin.register(Remito)
 class RemitoAdmin(admin.ModelAdmin):
-    list_display = ("numero", "remito_uid", "hoja_ruta", "fecha", "cliente", "subcliente", "direccion", "estado", "created_at")
-    list_filter = ("estado", "fecha", "hoja_ruta__estado", "created_at")
+    list_display = ("numero", "remito_uid", "empresa", "hoja_ruta", "fecha", "cliente", "subcliente", "direccion", "estado", "created_at")
+    list_filter = ("empresa", "estado", "fecha", "hoja_ruta__estado", "created_at")
     search_fields = ("numero", "remito_uid", "cliente", "subcliente", "direccion", "hoja_ruta__oid", "hoja_ruta__nro_entrega")
     readonly_fields = ("created_at",)
 
@@ -108,8 +118,8 @@ class RoleDefinitionAdmin(admin.ModelAdmin):
 
 @admin.register(Evidencia)
 class EvidenciaAdmin(admin.ModelAdmin):
-    list_display = ("id", "hoja_ruta", "remito", "remito_uid", "canal", "estado_validacion", "fecha_carga", "archivo")
-    list_filter = ("canal", "estado_validacion", "fecha_carga")
+    list_display = ("id", "empresa", "hoja_ruta", "remito", "remito_uid", "canal", "estado_validacion", "fecha_carga", "archivo")
+    list_filter = ("empresa", "canal", "estado_validacion", "fecha_carga")
     search_fields = ("remito__numero", "remito__remito_uid", "hoja_ruta__oid", "hoja_ruta__nro_entrega", "comentario", "origen")
     readonly_fields = ("fecha_carga",)
 
@@ -120,8 +130,8 @@ class EvidenciaAdmin(admin.ModelAdmin):
 
 @admin.register(IntentoEntrega)
 class IntentoEntregaAdmin(admin.ModelAdmin):
-    list_display = ("id", "hoja_ruta", "remito", "remito_uid", "canal", "motivo", "fecha_evento")
-    list_filter = ("canal", "motivo", "fecha_evento")
+    list_display = ("id", "empresa", "hoja_ruta", "remito", "remito_uid", "canal", "motivo", "fecha_evento")
+    list_filter = ("empresa", "canal", "motivo", "fecha_evento")
     search_fields = ("remito__numero", "remito__remito_uid", "hoja_ruta__oid", "hoja_ruta__nro_entrega", "comentario")
     readonly_fields = ("fecha_evento",)
 
@@ -132,8 +142,8 @@ class IntentoEntregaAdmin(admin.ModelAdmin):
 
 @admin.register(IntentoAccesoPortal)
 class IntentoAccesoPortalAdmin(admin.ModelAdmin):
-    list_display = ("id", "canal", "oid", "motivo", "ip_address", "fecha_evento")
-    list_filter = ("canal", "motivo", "fecha_evento")
+    list_display = ("id", "empresa", "canal", "oid", "motivo", "ip_address", "fecha_evento")
+    list_filter = ("empresa", "canal", "motivo", "fecha_evento")
     search_fields = ("oid", "ip_address", "user_agent", "path", "detalle")
     readonly_fields = ("fecha_evento",)
 
@@ -148,8 +158,8 @@ class PublicAlertRecipientAdmin(admin.ModelAdmin):
 
 @admin.register(EventoTrazabilidad)
 class EventoTrazabilidadAdmin(admin.ModelAdmin):
-    list_display = ("id", "tipo", "hoja_ruta", "remito", "remito_uid", "canal", "fecha_evento")
-    list_filter = ("tipo", "canal", "fecha_evento")
+    list_display = ("id", "empresa", "tipo", "hoja_ruta", "remito", "remito_uid", "canal", "fecha_evento")
+    list_filter = ("empresa", "tipo", "canal", "fecha_evento")
     search_fields = ("hoja_ruta__oid", "hoja_ruta__nro_entrega", "remito__numero", "remito__remito_uid", "detalle")
     readonly_fields = ("fecha_evento",)
 
@@ -160,6 +170,7 @@ class EventoTrazabilidadAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "rol", "share_logistica", "share_cliente")
-    list_filter = ("rol", "share_logistica", "share_cliente")
+    list_display = ("user", "rol", "empresa_principal", "share_logistica", "share_cliente")
+    list_filter = ("rol", "empresa_principal", "share_logistica", "share_cliente")
     search_fields = ("user__username", "user__email")
+    filter_horizontal = ("empresas",)

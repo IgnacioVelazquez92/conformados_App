@@ -15,6 +15,7 @@ def registrar_evidencia(*, hoja: HojaRuta, remito: Remito, canal: str, archivo, 
 
     evidencia = Evidencia.objects.create(
         hoja_ruta=hoja,
+        empresa=hoja.empresa,
         remito=remito,
         canal=canal,
         archivo=archivo,
@@ -27,6 +28,7 @@ def registrar_evidencia(*, hoja: HojaRuta, remito: Remito, canal: str, archivo, 
 
     EventoTrazabilidad.objects.create(
         hoja_ruta=hoja,
+        empresa=hoja.empresa,
         remito=remito,
         tipo=EventoTrazabilidad.Tipo.CARGA_EVIDENCIA,
         canal=canal,
@@ -42,6 +44,7 @@ def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str
 
     intento = IntentoEntrega.objects.create(
         hoja_ruta=hoja,
+        empresa=hoja.empresa,
         remito=remito,
         canal=canal,
         motivo=motivo,
@@ -53,6 +56,7 @@ def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str
 
     EventoTrazabilidad.objects.create(
         hoja_ruta=hoja,
+        empresa=hoja.empresa,
         remito=remito,
         tipo=EventoTrazabilidad.Tipo.INTENTO_FALLIDO,
         canal=canal,
@@ -62,8 +66,9 @@ def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str
 
 
 @transaction.atomic
-def registrar_intento_acceso_portal(*, canal: str, oid: str, motivo: str, ip_address: str = "", user_agent: str = "", path: str = "", detalle: str = "") -> IntentoAccesoPortal:
+def registrar_intento_acceso_portal(*, canal: str, oid: str, motivo: str, empresa=None, ip_address: str = "", user_agent: str = "", path: str = "", detalle: str = "") -> IntentoAccesoPortal:
     return IntentoAccesoPortal.objects.create(
+        empresa=empresa,
         canal=canal,
         oid=oid,
         motivo=motivo,
