@@ -961,22 +961,24 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
         messages.error(request, "No tenes permisos para importar PDF.")
         return redirect("panel-home")
 
+    session_slug = request.session.get("active_empresa_slug", "")
+    active_empresa = get_active_empresa_for_user(request.user, session_slug)
+    if not active_empresa:
+        messages.error(request, "No hay empresa activa. Seleccioná una empresa desde el menú.")
+        return redirect("panel-home")
+
     preview = None
     preview_token = ""
     preview_file_name = ""
-    empresas = get_user_empresas(request.user)
     if request.method == "POST":
         action = request.POST.get("action", "preview")
         token = request.POST.get("preview_token", "").strip()
 
         if action == "import" and token and "pdf_file" not in request.FILES:
-            form = ImportPdfForm(empresas=empresas)
+            form = ImportPdfForm()
             try:
-                empresa = empresas.filter(pk=request.POST.get("empresa")).first()
-                if not empresa:
-                    raise ValueError("Selecciona una empresa valida para importar.")
                 with _open_import_preview_file(request, token, "pdf") as pdf_file:
-                    hoja = import_hoja_ruta_pdf(pdf_file, empresa=empresa)
+                    hoja = import_hoja_ruta_pdf(pdf_file, empresa=active_empresa)
             except Exception as exc:
                 form.add_error("pdf_file", str(exc))
                 preview_token = token
@@ -989,9 +991,8 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
                 messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
                 return redirect("panel-home")
         else:
-            form = ImportPdfForm(request.POST, request.FILES, empresas=empresas)
+            form = ImportPdfForm(request.POST, request.FILES)
             if form.is_valid():
-                empresa = form.cleaned_data["empresa"]
                 pdf_file = form.cleaned_data["pdf_file"]
                 try:
                     page_texts = extract_page_texts_from_pdf(pdf_file)
@@ -1002,7 +1003,7 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
                     form.add_error("pdf_file", str(exc))
                 else:
                     if action == "import":
-                        hoja = import_hoja_ruta_pdf(pdf_file, empresa=empresa)
+                        hoja = import_hoja_ruta_pdf(pdf_file, empresa=active_empresa)
                         messages.success(request, f"Hoja {hoja.nro_entrega} importada correctamente.")
                         return redirect("panel-home")
 
@@ -1010,7 +1011,7 @@ def panel_importar_pdf(request: HttpRequest) -> HttpResponse:
                     preview_token = _save_import_preview_file(request, pdf_file, "pdf")
                     preview_file_name = Path(pdf_file.name or "").name
     else:
-        form = ImportPdfForm(empresas=empresas)
+        form = ImportPdfForm()
 
     return render(
         request,

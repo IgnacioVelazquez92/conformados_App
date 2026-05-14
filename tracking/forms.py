@@ -18,16 +18,7 @@ def _role_choices(current_role: str | None = None) -> list[tuple[str, str]]:
 
 
 class ImportPdfForm(forms.Form):
-    empresa = forms.ModelChoiceField(
-        label="Empresa",
-        queryset=Empresa.objects.none(),
-        empty_label=None,
-    )
     pdf_file = forms.FileField(label="PDF de Hoja de Ruta")
-
-    def __init__(self, *args, empresas=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["empresa"].queryset = empresas if empresas is not None else Empresa.objects.filter(active=True)
 
     def clean_pdf_file(self):
         pdf_file = self.cleaned_data["pdf_file"]

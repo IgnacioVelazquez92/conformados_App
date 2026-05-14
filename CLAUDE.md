@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-> **Sincronización obligatoria:** Este archivo es una copia de `CLAUDE.md`. Cada vez que se actualice uno, se debe actualizar el otro de forma inmediata y con el mismo contenido. Son documentos gemelos.
+> **Sincronización obligatoria:** Este archivo es una copia de `AGENTS.md`. Cada vez que se actualice uno, se debe actualizar el otro de forma inmediata y con el mismo contenido. Son documentos gemelos.
 
 ---
 
