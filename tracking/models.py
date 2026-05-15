@@ -55,7 +55,7 @@ class HojaRuta(models.Model):
     acompanante = models.CharField(max_length=120, blank=True)
     transporte = models.CharField(max_length=120, blank=True)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.IMPORTADA)
-    archivo_pdf_original = models.FileField(upload_to=hoja_ruta_pdf_upload_to, blank=True)
+    archivo_pdf_original = models.FileField(upload_to=hoja_ruta_pdf_upload_to, blank=True, max_length=200)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -168,7 +168,7 @@ class Evidencia(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="evidencias")
     remito = models.ForeignKey(Remito, on_delete=models.CASCADE, related_name="evidencias")
     canal = models.CharField(max_length=20, choices=Canal.choices)
-    archivo = models.FileField(upload_to=conformado_upload_to)
+    archivo = models.FileField(upload_to=conformado_upload_to, max_length=200)
     fecha_carga = models.DateTimeField(auto_now_add=True)
     estado_validacion = models.CharField(
         max_length=20,
