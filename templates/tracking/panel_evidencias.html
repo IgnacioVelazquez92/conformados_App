@@ -32,6 +32,7 @@
             <thead class="table-light">
                 <tr>
                     <th>Hoja</th>
+                    <th>Empresa</th>
                     <th>Fecha remito</th>
                     <th>Fecha conformado</th>
                     <th>Remito</th>
@@ -44,6 +45,7 @@
                 {% for evidencia in evidencias %}
                 <tr>
                     <td>{{ evidencia.hoja_ruta.nro_entrega }}</td>
+                    <td>{{ evidencia.empresa.name }}</td>
                     <td>{{ evidencia.remito.fecha|date:"d/m/Y"|default:"-" }}</td>
                     <td>{{ evidencia.fecha_carga|date:"d/m/Y H:i" }}</td>
                     <td>{{ evidencia.remito.numero }}</td>
@@ -53,7 +55,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center text-secondary py-4">No hay evidencias cargadas.</td>
+                    <td colspan="8" class="text-center text-secondary py-4">No hay evidencias cargadas.</td>
                 </tr>
                 {% endfor %}
             </tbody>

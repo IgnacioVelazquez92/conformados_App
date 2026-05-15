@@ -51,6 +51,7 @@
             <thead class="table-light">
                 <tr>
                     <th>Hoja</th>
+                    <th>Empresa</th>
                     <th>Fecha remito</th>
                     <th>Fecha conformado</th>
                     <th>Cliente</th>
@@ -64,6 +65,7 @@
                 {% for remito in remitos %}
                 <tr>
                     <td>{{ remito.hoja_ruta.nro_entrega }}</td>
+                    <td>{{ remito.empresa.name }}</td>
                     <td>{{ remito.fecha|date:"d/m/Y"|default:"-" }}</td>
                     <td>{{ remito.fecha_ultima_evidencia|date:"d/m/Y H:i"|default:"-" }}</td>
                     <td>
@@ -86,7 +88,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center text-secondary py-4">No hay remitos para esos filtros.</td>
+                    <td colspan="9" class="text-center text-secondary py-4">No hay remitos para esos filtros.</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -13,7 +13,7 @@ import fitz  # PyMuPDF
 import numpy as np
 from django.db import transaction
 
-from tracking.models import EventoTrazabilidad, HojaRuta, Remito
+from tracking.models import Empresa, EventoTrazabilidad, HojaRuta, Remito
 
 UUID_PATTERN_TEXT = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 OID_PATTERN = re.compile(rf"(?P<oid>{UUID_PATTERN_TEXT})")
@@ -499,8 +499,9 @@ def parse_hoja_ruta_pdf_pages(page_texts: list[str], oid: uuid.UUID | None = Non
     }
 
 
-def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
+def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any, empresa: Empresa) -> HojaRuta:
     hoja, _ = HojaRuta.objects.update_or_create(
+        empresa=empresa,
         oid=parsed["oid"],
         defaults={
             "nro_entrega": parsed["nro_entrega"],
@@ -529,15 +530,17 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
             remito = Remito.objects.filter(hoja_ruta=hoja, numero=remito_data.numero).first()
 
         if remito is None:
-            remito = Remito.objects.create(hoja_ruta=hoja, remito_uid=remito_data.remito_uid, **defaults)
+            remito = Remito.objects.create(hoja_ruta=hoja, empresa=empresa, remito_uid=remito_data.remito_uid, **defaults)
         else:
+            remito.empresa = empresa
             remito.remito_uid = remito_data.remito_uid
             for field, value in defaults.items():
                 setattr(remito, field, value)
-            remito.save(update_fields=["remito_uid", *defaults.keys()])
+            remito.save(update_fields=["empresa", "remito_uid", *defaults.keys()])
 
         EventoTrazabilidad.objects.create(
             hoja_ruta=hoja,
+            empresa=empresa,
             remito=remito,
             tipo=EventoTrazabilidad.Tipo.IMPORTACION,
             detalle="Remito importado desde archivo.",
@@ -545,6 +548,7 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
 
     EventoTrazabilidad.objects.create(
         hoja_ruta=hoja,
+        empresa=empresa,
         tipo=EventoTrazabilidad.Tipo.IMPORTACION,
         detalle=f"Hoja importada desde archivo con {len(parsed['remitos'])} remitos.",
     )
@@ -552,9 +556,9 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any) -> HojaRuta:
 
 
 @transaction.atomic
-def import_hoja_ruta_pdf(pdf_file: Any) -> HojaRuta:
+def import_hoja_ruta_pdf(pdf_file: Any, *, empresa: Empresa) -> HojaRuta:
     page_texts = extract_page_texts_from_pdf(pdf_file)
     oid = extract_oid_from_qr(pdf_file)
     parsed = parse_hoja_ruta_pdf_pages(page_texts, oid=oid)
     _validate_parsed_hoja(parsed)
-    return _import_parsed_hoja(parsed, pdf_file)
+    return _import_parsed_hoja(parsed, pdf_file, empresa)

@@ -9,13 +9,34 @@ from django.utils import timezone
 
 def hoja_ruta_pdf_upload_to(instance: "HojaRuta", filename: str) -> str:
     extension = Path(filename).suffix.lower() or ".pdf"
-    return f"hojas-ruta/{instance.oid}/original{extension}"
+    empresa = instance.empresa.slug if instance.empresa_id else "sin-empresa"
+    return f"hojas-ruta/{empresa}/{instance.oid}/original{extension}"
 
 
 def conformado_upload_to(instance: "Evidencia", filename: str) -> str:
     extension = Path(filename).suffix.lower() or ".jpg"
     timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
-    return f"conformados/{instance.hoja_ruta.oid}/{instance.remito.remito_uid}/{timestamp}{extension}"
+    empresa = instance.empresa.slug if instance.empresa_id else instance.hoja_ruta.empresa.slug
+    return f"conformados/{empresa}/{instance.hoja_ruta.oid}/{instance.remito.remito_uid}/{timestamp}{extension}"
+
+
+class Empresa(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=60, unique=True)
+    active = models.BooleanField(default=True)
+    theme_css = models.CharField(max_length=120, default="vendor/bootstrap/css/bootstrap.min.css")
+    brand_color = models.CharField(max_length=20, blank=True)
+    accent_color = models.CharField(max_length=20, blank=True)
+    erp_identifier = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class HojaRuta(models.Model):
@@ -24,7 +45,8 @@ class HojaRuta(models.Model):
         ABIERTA = "abierta", "Abierta"
         CERRADA = "cerrada", "Cerrada"
 
-    oid = models.UUIDField(unique=True)
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="hojas_ruta")
+    oid = models.UUIDField()
     nro_entrega = models.CharField(max_length=64)
     fecha = models.DateField()
     transporte_tipo = models.CharField(max_length=100, blank=True)
@@ -37,8 +59,13 @@ class HojaRuta(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["empresa", "oid"], name="unique_hoja_ruta_empresa_oid"),
+        ]
+
     def __str__(self) -> str:
-        return f"{self.nro_entrega} ({self.oid})"
+        return f"{self.empresa.name} - {self.nro_entrega} ({self.oid})"
 
 
 class RoleDefinition(models.Model):
@@ -46,6 +73,7 @@ class RoleDefinition(models.Model):
     label = models.CharField(max_length=120)
     can_import_pdf = models.BooleanField(default=False)
     can_review_evidence = models.BooleanField(default=False)
+    can_audit_remitos = models.BooleanField(default=False)
     can_close_hoja = models.BooleanField(default=False)
     can_manage_users = models.BooleanField(default=False)
     share_logistica_default = models.BooleanField(default=False)
@@ -64,6 +92,7 @@ class RoleDefinition(models.Model):
         return {
             "can_import_pdf": self.can_import_pdf,
             "can_review_evidence": self.can_review_evidence,
+            "can_audit_remitos": self.can_audit_remitos,
             "can_close_hoja": self.can_close_hoja,
             "can_manage_users": self.can_manage_users,
             "share_logistica_default": self.share_logistica_default,
@@ -86,6 +115,7 @@ class RoleDefinition(models.Model):
         return {
             "can_import_pdf": False,
             "can_review_evidence": False,
+            "can_audit_remitos": False,
             "can_close_hoja": False,
             "can_manage_users": False,
             "share_logistica_default": False,
@@ -104,6 +134,7 @@ class Remito(models.Model):
         CERRADO = "cerrado", "Cerrado"
 
     hoja_ruta = models.ForeignKey(HojaRuta, on_delete=models.CASCADE, related_name="remitos")
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="remitos")
     remito_uid = models.CharField(max_length=120)
     numero = models.CharField(max_length=50)
     cliente = models.CharField(max_length=180)
@@ -134,6 +165,7 @@ class Evidencia(models.Model):
         RECHAZADA = "rechazada", "Rechazada"
 
     hoja_ruta = models.ForeignKey(HojaRuta, on_delete=models.CASCADE, related_name="evidencias")
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="evidencias")
     remito = models.ForeignKey(Remito, on_delete=models.CASCADE, related_name="evidencias")
     canal = models.CharField(max_length=20, choices=Canal.choices)
     archivo = models.FileField(upload_to=conformado_upload_to)
@@ -154,6 +186,7 @@ class IntentoEntrega(models.Model):
         INTERNO = "interno", "Interno"
 
     hoja_ruta = models.ForeignKey(HojaRuta, on_delete=models.CASCADE, related_name="intentos")
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="intentos")
     remito = models.ForeignKey(Remito, on_delete=models.CASCADE, related_name="intentos")
     canal = models.CharField(max_length=20, choices=Canal.choices)
     motivo = models.CharField(max_length=120)
@@ -166,6 +199,7 @@ class IntentoAccesoPortal(models.Model):
         OID_INVALIDO = "oid_invalido", "OID invalido"
         HOJA_INEXISTENTE = "hoja_inexistente", "Hoja inexistente"
 
+    empresa = models.ForeignKey(Empresa, on_delete=models.SET_NULL, null=True, blank=True, related_name="intentos_acceso")
     canal = models.CharField(max_length=20)
     oid = models.CharField(max_length=64)
     motivo = models.CharField(max_length=30, choices=Motivo.choices)
@@ -200,6 +234,7 @@ class EventoTrazabilidad(models.Model):
         CIERRE = "cierre", "Cierre"
 
     hoja_ruta = models.ForeignKey(HojaRuta, on_delete=models.CASCADE, related_name="eventos")
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="eventos")
     remito = models.ForeignKey(Remito, on_delete=models.SET_NULL, null=True, blank=True, related_name="eventos")
     tipo = models.CharField(max_length=30, choices=Tipo.choices)
     canal = models.CharField(max_length=20, blank=True)
@@ -213,6 +248,8 @@ class EventoTrazabilidad(models.Model):
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     rol = models.CharField(max_length=50, default="otro")
+    empresa_principal = models.ForeignKey(Empresa, on_delete=models.SET_NULL, null=True, blank=True, related_name="usuarios_principales")
+    empresas = models.ManyToManyField(Empresa, blank=True, related_name="usuarios")
     share_logistica = models.BooleanField(default=False)
     share_cliente = models.BooleanField(default=False)
 

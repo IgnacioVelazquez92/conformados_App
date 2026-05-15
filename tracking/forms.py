@@ -2,7 +2,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import AuthenticationForm
 
-from .models import RoleDefinition
+from .models import Empresa, RoleDefinition
 
 
 def _role_choices(current_role: str | None = None) -> list[tuple[str, str]]:
@@ -30,7 +30,16 @@ class ImportPdfForm(forms.Form):
 
 
 class ImportSpreadsheetForm(forms.Form):
+    empresa = forms.ModelChoiceField(
+        label="Empresa",
+        queryset=Empresa.objects.none(),
+        empty_label=None,
+    )
     archivo = forms.FileField(label="Excel o CSV de Hoja de Ruta")
+
+    def __init__(self, *args, empresas=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["empresa"].queryset = empresas if empresas is not None else Empresa.objects.filter(active=True)
 
     def clean_archivo(self):
         archivo = self.cleaned_data["archivo"]
@@ -45,6 +54,22 @@ class ImportSpreadsheetForm(forms.Form):
         )
         if not any(name.endswith(ext) for ext in allowed_extensions) and content_type not in allowed_types:
             raise forms.ValidationError("El archivo debe ser Excel (.xlsx) o CSV.")
+        return archivo
+
+
+class ImportUsersForm(forms.Form):
+    archivo = forms.FileField(label="Excel de usuarios")
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data["archivo"]
+        name = (archivo.name or "").lower()
+        content_type = getattr(archivo, "content_type", "") or ""
+        allowed_types = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
+        )
+        if not name.endswith((".xlsx", ".xlsm")) and content_type not in allowed_types:
+            raise forms.ValidationError("El archivo debe ser Excel (.xlsx o .xlsm).")
         return archivo
 
 
@@ -132,17 +157,37 @@ class UserCreateForm(forms.Form):
         label="Rol",
         choices=(),
     )
+    empresa_principal = forms.ModelChoiceField(
+        label="Empresa principal",
+        queryset=Empresa.objects.none(),
+        required=True,
+        empty_label=None,
+    )
+    empresas = forms.ModelMultipleChoiceField(
+        label="Empresas autorizadas",
+        queryset=Empresa.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
     share_logistica = forms.BooleanField(label="Permitir compartir link logistica", required=False)
     share_cliente = forms.BooleanField(label="Permitir compartir link cliente", required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["rol"].choices = _role_choices()
+        empresas = Empresa.objects.filter(active=True).order_by("name")
+        self.fields["empresa_principal"].queryset = empresas
+        self.fields["empresas"].queryset = empresas
 
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data.get("password1") != cleaned_data.get("password2"):
             raise forms.ValidationError("Las contrasenas no coinciden.")
+        empresa_principal = cleaned_data.get("empresa_principal")
+        empresas = list(cleaned_data.get("empresas") or [])
+        if empresa_principal and empresa_principal not in empresas:
+            empresas.append(empresa_principal)
+            cleaned_data["empresas"] = empresas
         return cleaned_data
 
 
@@ -153,6 +198,18 @@ class UserUpdateForm(forms.Form):
     rol = forms.ChoiceField(
         label="Rol",
         choices=(),
+    )
+    empresa_principal = forms.ModelChoiceField(
+        label="Empresa principal",
+        queryset=Empresa.objects.none(),
+        required=True,
+        empty_label=None,
+    )
+    empresas = forms.ModelMultipleChoiceField(
+        label="Empresas autorizadas",
+        queryset=Empresa.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
     )
     share_logistica = forms.BooleanField(label="Permitir compartir link logistica", required=False)
     share_cliente = forms.BooleanField(label="Permitir compartir link cliente", required=False)
@@ -167,6 +224,18 @@ class UserUpdateForm(forms.Form):
         if not current_role:
             current_role = self.initial.get("rol", "")
         self.fields["rol"].choices = _role_choices(current_role)
+        empresas = Empresa.objects.filter(active=True).order_by("name")
+        self.fields["empresa_principal"].queryset = empresas
+        self.fields["empresas"].queryset = empresas
+
+    def clean(self):
+        cleaned_data = super().clean()
+        empresa_principal = cleaned_data.get("empresa_principal")
+        empresas = list(cleaned_data.get("empresas") or [])
+        if empresa_principal and empresa_principal not in empresas:
+            empresas.append(empresa_principal)
+            cleaned_data["empresas"] = empresas
+        return cleaned_data
 
 
 class UserDeleteForm(forms.Form):

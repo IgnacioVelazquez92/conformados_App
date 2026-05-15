@@ -44,6 +44,7 @@
         </a>
     </div>
     {% endif %}
+    {% if can_audit_remitos %}
     <div class="col-12 col-md-6 col-xl-3">
         <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/remitos/">
             <div>
@@ -53,6 +54,7 @@
             <span class="quick-access-icon bg-warning-subtle text-warning"><i class="bi bi-clipboard-data"></i></span>
         </a>
     </div>
+    {% endif %}
     {% if can_review_evidence %}
     <div class="col-12 col-md-6 col-xl-3">
         <a class="quick-access-card d-flex align-items-center justify-content-between gap-3 p-3 h-100 text-decoration-none" href="/panel/auditoria/hr-no-cargadas/">
@@ -136,6 +138,7 @@
             <thead class="table-light">
                 <tr>
                     <th>Entrega</th>
+                    <th>Empresa</th>
                     <th>Fecha</th>
                     <th>Estado</th>
                     <th>Remitos</th>
@@ -147,6 +150,7 @@
             {% for hoja in hojas %}
                 <tr>
                     <td class="fw-semibold">{{ hoja.nro_entrega }}</td>
+                    <td>{{ hoja.empresa.name }}</td>
                     <td>{{ hoja.fecha|date:"d/m/Y" }}</td>
                     <td><span class="badge text-bg-light border">{{ hoja.get_estado_display }}</span></td>
                     <td>
@@ -157,10 +161,10 @@
                     </td>
                     <td class="d-none d-xl-table-cell"><small class="text-secondary">{{ hoja.oid }}</small></td>
                     <td class="cell-actions justify-content-end">
-                        <a class="btn btn-sm btn-outline-dark" href="/panel/hojas/{{ hoja.oid }}/">Detalle</a>
+                        <a class="btn btn-sm btn-outline-dark" href="/panel/empresas/{{ hoja.empresa.slug }}/hojas/{{ hoja.oid }}/">Detalle</a>
                         {% if hoja.estado != "cerrada" and can_close_hoja %}
                             {% if hoja.remitos_pendientes == 0 %}
-                                <a class="btn btn-sm btn-outline-danger" href="/panel/hojas/{{ hoja.oid }}/cerrar/">Cerrar</a>
+                                <a class="btn btn-sm btn-outline-danger" href="/panel/empresas/{{ hoja.empresa.slug }}/hojas/{{ hoja.oid }}/cerrar/">Cerrar</a>
                             {% else %}
                                 <a class="btn btn-sm btn-outline-secondary disabled" href="#" tabindex="-1" aria-disabled="true" title="Faltan remitos por conformar u observar">Cerrar</a>
                             {% endif %}
@@ -169,7 +173,7 @@
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center text-secondary py-4">No hay hojas cargadas para los filtros seleccionados.</td>
+                    <td colspan="7" class="text-center text-secondary py-4">No hay hojas cargadas para los filtros seleccionados.</td>
                 </tr>
             {% endfor %}
             </tbody>
