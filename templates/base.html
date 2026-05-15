@@ -24,7 +24,7 @@
                 <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
                     {% if request.user.is_authenticated %}
                         {% if empresas_usuario|length > 1 %}
-                            <form class="d-flex align-items-center" method="get" action="{{ request.path }}">
+                            <form class="d-flex align-items-center" method="get" action="/panel/">
                                 <label class="visually-hidden" for="empresa-navbar">Empresa</label>
                                 <select id="empresa-navbar" class="form-select form-select-sm border-0 shadow-sm" name="empresa" onchange="this.form.submit()">
                                     {% for empresa in empresas_usuario %}
