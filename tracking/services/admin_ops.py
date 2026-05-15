@@ -41,13 +41,12 @@ def cerrar_hoja_ruta(*, hoja: HojaRuta, comentario: str = "") -> HojaRuta:
     if hoja.estado == HojaRuta.Estado.CERRADA:
         raise ValueError("La hoja ya esta cerrada.")
 
-    remitos_pendientes = hoja.remitos.exclude(
-        estado__in={Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO}
-    )
+    _ESTADOS_RESUELTOS = {Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO, Remito.Estado.INTENTO_FALLIDO}
+    remitos_pendientes = hoja.remitos.exclude(estado__in=_ESTADOS_RESUELTOS)
     if remitos_pendientes.exists():
         cantidad = remitos_pendientes.count()
         raise ValueError(
-            f"No se puede cerrar la hoja porque hay {cantidad} remito(s) sin conformar u observar."
+            f"No se puede cerrar la hoja porque hay {cantidad} remito(s) sin conformar, observar o registrar no-entrega."
         )
 
     hoja.estado = HojaRuta.Estado.CERRADA

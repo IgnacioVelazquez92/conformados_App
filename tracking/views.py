@@ -198,12 +198,12 @@ def _hojas_filtradas_context(request: HttpRequest, *, usar_fechas: bool = True) 
         remitos_total=Count("remitos", distinct=True),
         remitos_conformados=Count(
             "remitos",
-            filter=Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
+            filter=Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO, Remito.Estado.INTENTO_FALLIDO)),
             distinct=True,
         ),
         remitos_pendientes=Count(
             "remitos",
-            filter=~Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)),
+            filter=~Q(remitos__estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO, Remito.Estado.INTENTO_FALLIDO)),
             distinct=True,
         ),
     ).order_by("-created_at")
@@ -1614,7 +1614,7 @@ def cerrar_hoja(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpR
 
     hoja = _get_scoped_hoja_or_404(request, oid, empresa_slug)
     remitos_pendientes = hoja.remitos.exclude(
-        estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO)
+        estado__in=(Remito.Estado.VALIDADO, Remito.Estado.OBSERVADO, Remito.Estado.INTENTO_FALLIDO)
     ).count()
     puede_cerrar = remitos_pendientes == 0
     if request.method == "POST":
