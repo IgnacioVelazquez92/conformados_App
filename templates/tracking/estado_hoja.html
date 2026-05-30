@@ -12,6 +12,8 @@
         <p class="mb-0">La hoja {{ oid }} aun no fue importada.</p>
     {% elif estado == "cerrada" %}
         <p class="mb-0">La hoja {{ oid }} esta cerrada y no acepta nuevas cargas.</p>
+    {% elif estado == "anulada" %}
+        <p class="mb-0">La hoja {{ oid }} fue anulada y no acepta cargas.</p>
     {% endif %}
 </section>
 {% endblock %}

@@ -7,7 +7,8 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from django.contrib import messages
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
@@ -23,9 +24,10 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.db.models.functions import TruncDate
 
-from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, ImportUsersForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
+from .forms import AnularHojaForm, CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, ImportUsersForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
 from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
 from .services.authz import (
+    can_anular_hoja,
     can_audit_remitos,
     can_close_hoja,
     can_grant_staff,
@@ -40,7 +42,7 @@ from .services.authz import (
     update_user_with_profile,
     user_can_access_empresa,
 )
-from .services.admin_ops import cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
+from .services.admin_ops import anular_hoja_ruta, cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
 from .services.conformados import registrar_evidencia, registrar_intento_acceso_portal, registrar_intento_no_entregado
 from .services.email_alerts import send_public_access_alert
 from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_page_texts_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf_pages
@@ -353,6 +355,7 @@ def _timeline_badge_class(tipo: str) -> str:
         EventoTrazabilidad.Tipo.VALIDACION: "bg-primary",
         EventoTrazabilidad.Tipo.RECHAZO: "bg-danger",
         EventoTrazabilidad.Tipo.CIERRE: "bg-dark",
+        EventoTrazabilidad.Tipo.ANULACION: "bg-danger",
     }.get(tipo, "bg-secondary")
 
 
@@ -377,6 +380,20 @@ def login_view(request: HttpRequest) -> HttpResponse:
 def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     return redirect("login")
+
+
+@login_required
+def cambiar_clave(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Contraseña actualizada correctamente.")
+            return redirect("panel-home")
+    else:
+        form = PasswordChangeForm(request.user)
+    return render(request, "tracking/cambiar_clave.html", {"form": form})
 
 
 @login_required
@@ -434,6 +451,7 @@ def panel_permisos(request: HttpRequest) -> HttpResponse:
         ("Revisar y validar evidencias", "can_review_evidence"),
         ("Auditoria de remitos", "can_audit_remitos"),
         ("Cerrar hoja", "can_close_hoja"),
+        ("Anular hoja", "can_anular_hoja"),
         ("Gestionar usuarios", "can_manage_users"),
         ("Compartir link logistica", "share_logistica_default"),
         ("Compartir link cliente", "share_cliente_default"),
@@ -648,6 +666,7 @@ def panel_home(request: HttpRequest) -> HttpResponse:
             "can_audit_remitos": can_audit_remitos(request.user),
             "can_manage_users": can_manage_users(request.user),
             "can_close_hoja": can_close_hoja(request.user),
+            "can_anular_hoja": can_anular_hoja(request.user),
         },
     )
 
@@ -808,6 +827,7 @@ def panel_hoja_detalle(request: HttpRequest, oid: str, empresa_slug: str = "") -
             "can_share_cliente": profile.can_share_cliente(),
             "logistica_url": logistica_url,
             "cliente_url": cliente_url,
+            "can_anular_hoja": can_anular_hoja(request.user),
         },
     )
 
@@ -1423,6 +1443,8 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
     request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid_text})
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid_text})
 
     remito_query = request.GET.get("remito", "").strip()
     remito_origen = request.GET.get("origen", "manual").strip()
@@ -1479,6 +1501,8 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid})
 
     form = EvidenciaForm(request.POST, request.FILES)
     try:
@@ -1551,6 +1575,8 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid})
 
     form = NoEntregadoForm(request.POST)
     try:
@@ -1670,4 +1696,40 @@ def cerrar_hoja(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpR
         request,
         "tracking/cerrar_hoja.html",
         {"hoja": hoja, "form": form, "puede_cerrar": puede_cerrar, "remitos_pendientes": remitos_pendientes},
+    )
+
+
+@login_required
+def anular_hoja(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpResponse:
+    if not can_anular_hoja(request.user):
+        messages.error(request, "No tenés permisos para anular hojas.")
+        return redirect("panel-home")
+
+    hoja = _get_scoped_hoja_or_404(request, oid, empresa_slug)
+
+    puede_anular = (
+        hoja.estado not in (HojaRuta.Estado.CERRADA, HojaRuta.Estado.ANULADA)
+        and not hoja.evidencias.exists()
+    )
+
+    if request.method == "POST":
+        form = AnularHojaForm(request.POST)
+        if form.is_valid():
+            if not puede_anular:
+                messages.error(request, "Esta hoja no puede ser anulada.")
+                return redirect("panel-home")
+            try:
+                anular_hoja_ruta(hoja=hoja, motivo=form.cleaned_data["motivo"])
+            except ValueError as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(request, f"Hoja {hoja.nro_entrega} anulada correctamente.")
+                return redirect("panel-home")
+    else:
+        form = AnularHojaForm()
+
+    return render(
+        request,
+        "tracking/anular_hoja.html",
+        {"hoja": hoja, "form": form, "puede_anular": puede_anular},
     )

@@ -500,6 +500,13 @@ def parse_hoja_ruta_pdf_pages(page_texts: list[str], oid: uuid.UUID | None = Non
 
 
 def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any, empresa: Empresa) -> HojaRuta:
+    existing = HojaRuta.objects.filter(empresa=empresa, oid=parsed["oid"]).first()
+    if existing and existing.estado == HojaRuta.Estado.ANULADA:
+        raise ValueError(
+            f"La hoja {existing.nro_entrega} (OID {existing.oid}) fue anulada y no puede reimportarse. "
+            "Para reactivarla, contactá al administrador."
+        )
+
     hoja, _ = HojaRuta.objects.update_or_create(
         empresa=empresa,
         oid=parsed["oid"],

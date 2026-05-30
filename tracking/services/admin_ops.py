@@ -37,6 +37,28 @@ def validar_evidencia(*, evidencia: Evidencia, estado: str, comentario: str = ""
 
 
 @transaction.atomic
+def anular_hoja_ruta(*, hoja: HojaRuta, motivo: str) -> HojaRuta:
+    if hoja.estado == HojaRuta.Estado.CERRADA:
+        raise ValueError("No se puede anular una hoja ya cerrada.")
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        raise ValueError("La hoja ya está anulada.")
+    if hoja.evidencias.exists():
+        raise ValueError("No se puede anular una hoja que ya tiene evidencias cargadas.")
+
+    hoja.estado = HojaRuta.Estado.ANULADA
+    hoja.motivo_anulacion = motivo
+    hoja.save(update_fields=["estado", "motivo_anulacion"])
+
+    EventoTrazabilidad.objects.create(
+        hoja_ruta=hoja,
+        empresa=hoja.empresa,
+        tipo=EventoTrazabilidad.Tipo.ANULACION,
+        detalle=f"Hoja anulada. Motivo: {motivo}",
+    )
+    return hoja
+
+
+@transaction.atomic
 def cerrar_hoja_ruta(*, hoja: HojaRuta, comentario: str = "") -> HojaRuta:
     if hoja.estado == HojaRuta.Estado.CERRADA:
         raise ValueError("La hoja ya esta cerrada.")

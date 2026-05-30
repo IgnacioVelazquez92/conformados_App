@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Anular hoja{% endblock %}
+
+{% block content %}
+<section class="brand-card bg-white p-4">
+    <h1 class="h4 page-heading">Anular hoja de ruta</h1>
+    <p class="mb-1">Hoja {{ hoja.nro_entrega }} ({{ hoja.oid }})</p>
+    <p class="page-subheading">Estado actual: {{ hoja.get_estado_display }}</p>
+
+    {% if not puede_anular %}
+        <div class="alert alert-danger">
+            Esta hoja no puede anularse.
+            {% if hoja.estado == "cerrada" %}
+                Ya fue cerrada operativamente.
+            {% elif hoja.estado == "anulada" %}
+                Ya está anulada.
+            {% else %}
+                Tiene evidencias cargadas. Solo se pueden anular hojas sin actividad registrada.
+            {% endif %}
+        </div>
+        <a class="btn btn-outline-secondary" href="/panel/">Volver</a>
+    {% else %}
+        <div class="alert alert-warning">
+            <strong>Atención:</strong> Esta acción es irreversible. La hoja quedará anulada y no podrá recibir nuevas cargas.
+            Para reactivarla será necesaria intervención del administrador.
+        </div>
+
+        {% if form.errors %}
+            <div class="alert alert-danger">{{ form.errors }}</div>
+        {% endif %}
+
+        <form method="post" class="row g-3">
+            {% csrf_token %}
+            <div class="col-12">
+                <label class="form-label" for="{{ form.motivo.id_for_label }}">{{ form.motivo.label }}</label>
+                <textarea
+                    class="form-control{% if form.motivo.errors %} is-invalid{% endif %}"
+                    id="{{ form.motivo.id_for_label }}"
+                    name="{{ form.motivo.html_name }}"
+                    rows="3"
+                    placeholder="Describí el motivo por el que se anula esta hoja de ruta."
+                ></textarea>
+                {% for error in form.motivo.errors %}
+                    <div class="invalid-feedback">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button class="btn btn-danger" type="submit">Confirmar anulación</button>
+                <a class="btn btn-outline-secondary" href="/panel/">Cancelar</a>
+            </div>
+        </form>
+    {% endif %}
+</section>
+{% endblock %}

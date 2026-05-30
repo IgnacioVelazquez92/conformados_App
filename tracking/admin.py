@@ -183,7 +183,7 @@ class HojaRutaAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Identificacion",
-            {"fields": ("empresa", "oid", "nro_entrega", "fecha", "estado", "archivo_pdf_original")},
+            {"fields": ("empresa", "oid", "nro_entrega", "fecha", "estado", "motivo_anulacion", "archivo_pdf_original")},
         ),
         (
             "Transporte",
@@ -215,6 +215,7 @@ class RoleDefinitionAdmin(admin.ModelAdmin):
         "can_review_evidence",
         "can_audit_remitos",
         "can_close_hoja",
+        "can_anular_hoja",
         "can_manage_users",
         "share_logistica_default",
         "share_cliente_default",
@@ -225,6 +226,7 @@ class RoleDefinitionAdmin(admin.ModelAdmin):
         "can_review_evidence",
         "can_audit_remitos",
         "can_close_hoja",
+        "can_anular_hoja",
         "can_manage_users",
         "share_logistica_default",
         "share_cliente_default",

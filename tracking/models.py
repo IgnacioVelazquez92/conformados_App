@@ -44,6 +44,7 @@ class HojaRuta(models.Model):
         IMPORTADA = "importada", "Importada"
         ABIERTA = "abierta", "Abierta"
         CERRADA = "cerrada", "Cerrada"
+        ANULADA = "anulada", "Anulada"
 
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="hojas_ruta")
     oid = models.UUIDField()
@@ -55,6 +56,7 @@ class HojaRuta(models.Model):
     acompanante = models.CharField(max_length=120, blank=True)
     transporte = models.CharField(max_length=120, blank=True)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.IMPORTADA)
+    motivo_anulacion = models.TextField(blank=True)
     archivo_pdf_original = models.FileField(upload_to=hoja_ruta_pdf_upload_to, blank=True, max_length=200)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -75,6 +77,7 @@ class RoleDefinition(models.Model):
     can_review_evidence = models.BooleanField(default=False)
     can_audit_remitos = models.BooleanField(default=False)
     can_close_hoja = models.BooleanField(default=False)
+    can_anular_hoja = models.BooleanField(default=False)
     can_manage_users = models.BooleanField(default=False)
     share_logistica_default = models.BooleanField(default=False)
     share_cliente_default = models.BooleanField(default=False)
@@ -94,6 +97,7 @@ class RoleDefinition(models.Model):
             "can_review_evidence": self.can_review_evidence,
             "can_audit_remitos": self.can_audit_remitos,
             "can_close_hoja": self.can_close_hoja,
+            "can_anular_hoja": self.can_anular_hoja,
             "can_manage_users": self.can_manage_users,
             "share_logistica_default": self.share_logistica_default,
             "share_cliente_default": self.share_cliente_default,
@@ -117,6 +121,7 @@ class RoleDefinition(models.Model):
             "can_review_evidence": False,
             "can_audit_remitos": False,
             "can_close_hoja": False,
+            "can_anular_hoja": False,
             "can_manage_users": False,
             "share_logistica_default": False,
             "share_cliente_default": False,
@@ -232,6 +237,7 @@ class EventoTrazabilidad(models.Model):
         VALIDACION = "validacion", "Validacion"
         RECHAZO = "rechazo", "Rechazo"
         CIERRE = "cierre", "Cierre"
+        ANULACION = "anulacion", "Anulacion"
 
     hoja_ruta = models.ForeignKey(HojaRuta, on_delete=models.CASCADE, related_name="eventos")
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="eventos")

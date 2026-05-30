@@ -143,6 +143,14 @@ class CierreHojaForm(forms.Form):
     comentario = forms.CharField(label="Comentario", required=False, widget=forms.Textarea)
 
 
+class AnularHojaForm(forms.Form):
+    motivo = forms.CharField(
+        label="Motivo de anulación",
+        required=True,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Describí el motivo por el que se anula esta hoja de ruta."}),
+    )
+
+
 class LoginForm(AuthenticationForm):
     username = forms.CharField(label="Usuario", widget=forms.TextInput(attrs={"autofocus": True}))
     password = forms.CharField(label="Contrasena", strip=False, widget=forms.PasswordInput)
