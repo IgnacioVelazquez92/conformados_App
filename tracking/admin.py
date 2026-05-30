@@ -35,7 +35,7 @@ class EvidenciaInline(admin.TabularInline):
 class IntentoEntregaInline(admin.TabularInline):
     model = IntentoEntrega
     extra = 0
-    fields = ("remito", "canal", "motivo", "comentario", "fecha_evento")
+    fields = ("remito", "canal", "motivo", "comentario", "archivo", "fecha_evento")
     readonly_fields = ("fecha_evento",)
     show_change_link = True
 

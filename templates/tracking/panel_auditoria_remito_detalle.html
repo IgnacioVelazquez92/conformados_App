@@ -118,7 +118,15 @@
                                                         <div class="text-secondary small">{{ intento.fecha_evento|date:"d/m/Y H:i" }}</div>
                                                     </div>
                                                     {% if intento.comentario %}
-                                                        <div class="small text-secondary">{{ intento.comentario }}</div>
+                                                        <div class="small text-secondary mb-2">{{ intento.comentario }}</div>
+                                                    {% endif %}
+                                                    {% if intento.archivo %}
+                                                        <div class="mb-1">
+                                                            <a href="{{ intento.archivo.url }}" target="_blank" rel="noopener">
+                                                                <img src="{{ intento.archivo.url }}" alt="Constancia de visita" class="img-fluid rounded border" style="max-height:240px;">
+                                                            </a>
+                                                            <div class="text-secondary small mt-1">Constancia de visita adjunta</div>
+                                                        </div>
                                                     {% endif %}
                                                 </div>
                                             {% endfor %}

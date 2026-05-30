@@ -1578,7 +1578,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     if hoja.estado == HojaRuta.Estado.ANULADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid})
 
-    form = NoEntregadoForm(request.POST)
+    form = NoEntregadoForm(request.POST, request.FILES)
     try:
         remito = _find_remito_in_hoja(hoja=hoja, remito_input=request.POST.get("remito_uid", ""), origen="qr")
     except ValueError as exc:
@@ -1604,6 +1604,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
                 canal=canal,
                 motivo=form.cleaned_data["motivo"],
                 comentario=form.cleaned_data.get("comentario", ""),
+                archivo=form.cleaned_data.get("archivo") or None,
             )
         except Exception as exc:
             form.add_error(None, str(exc))

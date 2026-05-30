@@ -148,6 +148,12 @@
                                 {% endif %}
                             </div>
 
+                            <!-- Comentario opcional -->
+                            <div class="col-12">
+                                <label class="form-label" for="id_comentario">Observación (opcional)</label>
+                                <textarea class="form-control" id="id_comentario" name="comentario" rows="2" placeholder="Ej: cliente solicitó cambio de producto X, mercadería observada…"></textarea>
+                            </div>
+
                             <!-- Paso 2: Confirmación -->
                             <div class="col-12 d-none" id="confirmationStep">
                                 <label class="form-label fw-bold">Paso 2: Confirmar envío</label>
@@ -190,12 +196,90 @@
 
                     <!-- No entregado -->
                     <div class="tab-pane fade" id="no-entregado-panel" role="tabpanel" aria-labelledby="no-entregado-tab">
-                        <form method="post" action="/conformados/{{ public_canal_segment }}/{{ hoja.oid }}/no-entregado/" class="row g-3" id="noEntregadoForm">
+                        <form method="post" action="/conformados/{{ public_canal_segment }}/{{ hoja.oid }}/no-entregado/" enctype="multipart/form-data" class="row g-3" id="noEntregadoForm" data-max-image-bytes="{{ evidencia_limits.max_image_bytes }}" data-max-image-mb="{{ evidencia_limits.max_image_mb }}">
                             {% csrf_token %}
                             <input type="hidden" name="remito_uid" value="{{ remito_seleccionado.remito_uid }}">
-                            <div class="col-12">{{ no_entregado_form.as_p }}</div>
+
+                            <!-- Motivo -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold" for="{{ no_entregado_form.motivo.id_for_label }}">Motivo de no entrega</label>
+                                {{ no_entregado_form.motivo }}
+                            </div>
+
+                            <!-- Comentario -->
+                            <div class="col-12">
+                                <label class="form-label" for="{{ no_entregado_form.comentario.id_for_label }}">Comentario (opcional)</label>
+                                <textarea class="form-control" id="{{ no_entregado_form.comentario.id_for_label }}" name="comentario" rows="2" placeholder="Ej: portón cerrado, sin respuesta al timbre…"></textarea>
+                            </div>
+
+                            <!-- Input de archivo oculto -->
+                            <input type="file" id="id_archivo_intento" name="archivo" accept="image/*" style="display:none;">
+
+                            <!-- Constancia de visita -->
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Constancia de visita (opcional)</label>
+                                <p class="text-secondary small mb-2">Podés adjuntar una foto del domicilio o puerta de acceso como respaldo del intento de entrega.</p>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <button type="button" class="btn btn-outline-secondary w-100" id="cameraBtnIntento">
+                                            <span>📷 Sacar foto</span>
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <button type="button" class="btn btn-outline-secondary w-100" id="fileUploadBtnIntento">
+                                            <span>📎 Subir foto</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Preview constancia -->
+                            <div class="col-12 d-none" id="intentoPreviewWrap">
+                                <div class="card border-secondary">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <h6 class="card-title mb-0">Foto cargada</h6>
+                                            <button class="btn btn-outline-secondary btn-sm" type="button" id="clearIntentoPreviewBtn">Cambiar</button>
+                                        </div>
+                                        <img id="intentoPreviewImage" class="img-fluid rounded d-none w-100" alt="Constancia de visita" style="max-height: 250px; object-fit: cover;">
+                                        <p class="small text-secondary mt-2 mb-0">
+                                            <strong>⚠️</strong> Verificá que el domicilio o la puerta de acceso sea claramente visible. Esta imagen queda registrada como constancia del intento de entrega.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Error foto intento -->
+                            <div class="col-12">
+                                <div class="alert alert-danger d-none mb-0" id="intentoPreviewError" role="alert"></div>
+                                {% if no_entregado_form.archivo.errors %}
+                                <div class="alert alert-danger mb-0">
+                                    {% for error in no_entregado_form.archivo.errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                {% if no_entregado_form.non_field_errors %}
+                                <div class="alert alert-danger mb-0">
+                                    {% for error in no_entregado_form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Confirmación si hay foto -->
+                            <div class="col-12 d-none" id="confirmationStepIntento">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="confirmIntentoCheckbox">
+                                    <label class="form-check-label small" for="confirmIntentoCheckbox">
+                                        Confirmo que la foto es legible y corresponde al domicilio del remito {{ remito_seleccionado.numero }}
+                                    </label>
+                                </div>
+                            </div>
+
                             <div class="col-12 d-grid">
-                                <button class="btn btn-danger" type="submit">Registrar no entregado</button>
+                                <button class="btn btn-danger" type="submit" id="submitIntentoBtn">Registrar no entregado</button>
                             </div>
                         </form>
                     </div>
@@ -227,8 +311,29 @@
     </div>
 </div>
 
-<!-- Canvas oculto para captura de foto -->
+<!-- Canvas oculto para captura de foto conformado -->
 <canvas id="photoCanvas" style="display: none;"></canvas>
+
+<!-- Modal cámara para constancia de visita (no entregado) -->
+<div class="modal fade" id="cameraModalIntento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Sacar foto del domicilio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <video id="cameraVideoIntento" style="width: 100%;" playsinline autoplay muted></video>
+                <div class="mt-2 text-center text-secondary small">Encuadra el frente del domicilio y presioná "Capturar"</div>
+            </div>
+            <div class="modal-footer gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="capturePhotoBtnIntento">Capturar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<canvas id="photoCanvasIntento" style="display: none;"></canvas>
 {% endif %}
 
 <section class="brand-card bg-white p-0 overflow-hidden mb-4">
@@ -830,6 +935,153 @@ window.addEventListener("load", function () {
             }
         });
     }
+})();
+});
+</script>
+
+<script>
+// JS para foto de constancia de visita (no entregado)
+window.addEventListener("load", function () {
+(function () {
+    const form = document.getElementById("noEntregadoForm");
+    if (!form) return;
+
+    const fileInput = document.getElementById("id_archivo_intento");
+    const submitBtn = document.getElementById("submitIntentoBtn");
+    const previewWrap = document.getElementById("intentoPreviewWrap");
+    const previewImage = document.getElementById("intentoPreviewImage");
+    const previewError = document.getElementById("intentoPreviewError");
+    const clearBtn = document.getElementById("clearIntentoPreviewBtn");
+    const confirmCheckbox = document.getElementById("confirmIntentoCheckbox");
+    const confirmationStep = document.getElementById("confirmationStepIntento");
+    const cameraBtn = document.getElementById("cameraBtnIntento");
+    const fileUploadBtn = document.getElementById("fileUploadBtnIntento");
+    const captureBtn = document.getElementById("capturePhotoBtnIntento");
+    const cameraVideo = document.getElementById("cameraVideoIntento");
+    const photoCanvas = document.getElementById("photoCanvasIntento");
+    const cameraModalElement = document.getElementById("cameraModalIntento");
+
+    const maxImageBytes = Number(form.dataset.maxImageBytes || 0);
+    const maxImageMb = form.dataset.maxImageMb || "8";
+
+    let objectUrl = "";
+    let currentStream = null;
+    let cameraModal = null;
+
+    if (cameraModalElement && window.bootstrap) {
+        cameraModal = new window.bootstrap.Modal(cameraModalElement, { backdrop: "static" });
+    }
+
+    function formatMb(bytes) { return (bytes / 1024 / 1024).toFixed(1); }
+
+    function showError(msg) {
+        if (previewError) { previewError.textContent = msg; previewError.classList.remove("d-none"); }
+    }
+    function clearError() {
+        if (previewError) { previewError.textContent = ""; previewError.classList.add("d-none"); }
+    }
+
+    function hasFile() { return fileInput && fileInput.files && fileInput.files.length > 0; }
+
+    function updateSubmitButton() {
+        if (!submitBtn) return;
+        if (!hasFile()) { submitBtn.disabled = false; return; }
+        const ok = confirmCheckbox && confirmCheckbox.checked;
+        submitBtn.disabled = !ok;
+    }
+
+    function clearPreview() {
+        if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = ""; }
+        if (previewImage) { previewImage.src = ""; previewImage.classList.add("d-none"); }
+        if (previewWrap) previewWrap.classList.add("d-none");
+        if (confirmationStep) confirmationStep.classList.add("d-none");
+        if (confirmCheckbox) confirmCheckbox.checked = false;
+        clearError();
+        updateSubmitButton();
+    }
+
+    function updatePreview() {
+        clearError();
+        const file = fileInput && fileInput.files[0];
+        if (!file) { clearPreview(); return; }
+
+        const name = file.name.toLowerCase();
+        const isImage = name.match(/\.(jpg|jpeg|png|webp)$/) || file.type.startsWith("image/");
+        if (!isImage) { showError("La constancia de visita debe ser una imagen."); return; }
+        if (maxImageBytes && file.size > maxImageBytes) {
+            showError(`La imagen pesa ${formatMb(file.size)} MB. Máximo: ${maxImageMb} MB.`);
+            return;
+        }
+
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = URL.createObjectURL(file);
+        if (previewImage) { previewImage.src = objectUrl; previewImage.classList.remove("d-none"); }
+        if (previewWrap) previewWrap.classList.remove("d-none");
+        if (confirmationStep) confirmationStep.classList.remove("d-none");
+        updateSubmitButton();
+    }
+
+    function stopCamera() {
+        if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+        if (cameraVideo) cameraVideo.srcObject = null;
+    }
+
+    if (fileInput) fileInput.addEventListener("change", updatePreview);
+    if (clearBtn) clearBtn.addEventListener("click", function () { if (fileInput) fileInput.value = ""; clearPreview(); });
+    if (confirmCheckbox) confirmCheckbox.addEventListener("change", updateSubmitButton);
+
+    if (cameraBtn) {
+        cameraBtn.addEventListener("click", async function () {
+            if (!cameraModal) return;
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                if (cameraVideo) cameraVideo.srcObject = currentStream;
+                cameraModal.show();
+            } catch (e) {
+                showError("No se pudo acceder a la cámara.");
+            }
+        });
+    }
+
+    if (fileUploadBtn) {
+        fileUploadBtn.addEventListener("click", function () { if (fileInput) fileInput.click(); });
+    }
+
+    if (captureBtn) {
+        captureBtn.addEventListener("click", function () {
+            try {
+                if (!cameraVideo || !photoCanvas) return;
+                photoCanvas.width = cameraVideo.videoWidth;
+                photoCanvas.height = cameraVideo.videoHeight;
+                photoCanvas.getContext("2d").drawImage(cameraVideo, 0, 0);
+                photoCanvas.toBlob(function (blob) {
+                    if (!blob) { showError("No se pudo capturar la foto."); return; }
+                    const file = new File([blob], "constancia_visita.jpg", { type: "image/jpeg" });
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    fileInput.files = dt.files;
+                    stopCamera();
+                    if (cameraModal) cameraModal.hide();
+                    updatePreview();
+                }, "image/jpeg", 0.85);
+            } catch (e) {
+                showError("Error al capturar la foto.");
+            }
+        });
+    }
+
+    if (cameraModalElement) {
+        cameraModalElement.addEventListener("hidden.bs.modal", stopCamera);
+    }
+
+    form.addEventListener("submit", function (e) {
+        if (hasFile() && confirmCheckbox && !confirmCheckbox.checked) {
+            e.preventDefault();
+            showError("Confirmá que la foto es correcta antes de enviar.");
+        }
+    });
+
+    updateSubmitButton();
 })();
 });
 </script>

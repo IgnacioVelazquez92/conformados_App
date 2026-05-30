@@ -20,6 +20,13 @@ def conformado_upload_to(instance: "Evidencia", filename: str) -> str:
     return f"conformados/{empresa}/{instance.hoja_ruta.oid}/{instance.remito.remito_uid}/{timestamp}{extension}"
 
 
+def intento_upload_to(instance: "IntentoEntrega", filename: str) -> str:
+    extension = Path(filename).suffix.lower() or ".jpg"
+    timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+    empresa = instance.empresa.slug if instance.empresa_id else instance.hoja_ruta.empresa.slug
+    return f"intentos/{empresa}/{instance.hoja_ruta.oid}/{instance.remito.remito_uid}/{timestamp}{extension}"
+
+
 class Empresa(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=120)
@@ -196,6 +203,7 @@ class IntentoEntrega(models.Model):
     canal = models.CharField(max_length=20, choices=Canal.choices)
     motivo = models.CharField(max_length=120)
     comentario = models.TextField(blank=True)
+    archivo = models.FileField(upload_to=intento_upload_to, blank=True, max_length=200)
     fecha_evento = models.DateTimeField(auto_now_add=True)
 
 
@@ -284,3 +292,8 @@ def delete_evidencia_file(sender, instance: Evidencia, **kwargs) -> None:
 @receiver(post_delete, sender=HojaRuta)
 def delete_hoja_ruta_pdf(sender, instance: HojaRuta, **kwargs) -> None:
     _delete_file_field(instance.archivo_pdf_original)
+
+
+@receiver(post_delete, sender=IntentoEntrega)
+def delete_intento_file(sender, instance: IntentoEntrega, **kwargs) -> None:
+    _delete_file_field(instance.archivo)
