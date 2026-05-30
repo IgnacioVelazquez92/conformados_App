@@ -59,14 +59,14 @@
                                     </div>
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="text-secondary small">{{ evento.fecha_evento|date:"d/m/Y H:i" }}</span>
-                                        {% if item.evidencias or item.intentos %}
+                                        {% if evento.tipo == "carga_evidencia" and item.evidencias or evento.tipo == "intento_fallido" and item.intentos %}
                                         <button class="btn btn-sm btn-link" type="button" data-detail-template="#detail-template-{{ forloop.counter0 }}">Ver más</button>
                                         {% endif %}
                                     </div>
                                 </div>
                                 <p class="mb-0 text-secondary">{{ evento.detalle|default:"Sin detalle registrado." }}</p>
 
-                                {% if item.evidencias or item.intentos %}
+                                {% if evento.tipo == "carga_evidencia" and item.evidencias or evento.tipo == "intento_fallido" and item.intentos %}
                                 <!-- Hidden template for modal content to avoid page shift -->
                                 <div id="detail-template-{{ forloop.counter0 }}" class="d-none">
                                     <div>
@@ -89,6 +89,11 @@
                                                         <a href="{{ ev.archivo.url }}" target="_blank" rel="noopener">
                                                             <img src="{{ ev.archivo.url }}" alt="Evidencia {{ remito.numero }}" class="img-fluid rounded border mb-2" style="max-height:360px;">
                                                         </a>
+                                                        <div class="mb-2">
+                                                            <a href="/panel/evidencias/{{ ev.evidencia.id }}/descargar/" class="btn btn-sm btn-outline-primary">
+                                                                Descargar imagen
+                                                            </a>
+                                                        </div>
                                                     {% elif ev.archivo.available and ev.archivo.is_pdf %}
                                                         <div class="alert alert-info mb-2">PDF disponible. <a href="{{ ev.archivo.url }}" target="_blank" rel="noopener">Abrir archivo</a></div>
                                                     {% elif ev.archivo.available %}

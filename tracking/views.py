@@ -17,7 +17,7 @@ from django.core.paginator import Paginator
 from django.core.files.base import File
 from django.core.files.storage import default_storage
 from django.db.models import Count, Max, Q
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -830,12 +830,15 @@ def panel_evidencias(request: HttpRequest) -> HttpResponse:
     if estado:
         evidencias_qs = evidencias_qs.filter(estado_validacion=estado)
 
-    evidencias = evidencias_qs[:200]
+    paginator = Paginator(evidencias_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
     return render(
         request,
         "tracking/panel_evidencias.html",
         {
-            "evidencias": evidencias,
+            "evidencias": page_obj,
+            "page_obj": page_obj,
             "remito": remito_q,
             "estado": estado,
             "estados": Evidencia.EstadoValidacion.choices,
@@ -881,11 +884,15 @@ def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
     elif conformado == "no":
         remitos_qs = remitos_qs.filter(evidencias_total=0)
 
+    paginator = Paginator(remitos_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
     return render(
         request,
         "tracking/panel_auditoria_remitos.html",
         {
-            "remitos": remitos_qs,
+            "remitos": page_obj,
+            "page_obj": page_obj,
             "q": q,
             "estado": estado,
             "conformado": conformado,
@@ -953,6 +960,35 @@ def panel_auditoria_remito_detalle(request: HttpRequest, remito_id: int) -> Http
             "total_intentos": len(intentos),
         },
     )
+
+
+@login_required
+def descargar_evidencia(request: HttpRequest, evidencia_id: int) -> HttpResponse:
+    evidencia = get_object_or_404(
+        _scope_by_empresa(request, Evidencia.objects.select_related("remito")),
+        pk=evidencia_id,
+    )
+    archivo = evidencia.archivo
+    if not archivo or not archivo.name:
+        raise Http404
+
+    extension = Path(archivo.name).suffix.lower()
+    numero_limpio = evidencia.remito.numero.replace("/", "-").replace(" ", "_")
+    filename = f"conformado_{numero_limpio}{extension}"
+
+    content_type_map = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".webp": "image/webp",
+        ".gif": "image/gif", ".pdf": "application/pdf",
+    }
+    content_type = content_type_map.get(extension, "application/octet-stream")
+
+    try:
+        response = HttpResponse(archivo.open("rb"), content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except Exception:
+        raise Http404
 
 
 @login_required
