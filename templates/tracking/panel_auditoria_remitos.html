@@ -76,7 +76,19 @@
                     <td><span class="badge text-bg-secondary">{{ remito.get_estado_display }}</span></td>
                     <td>
                         {% if remito.evidencias_total %}
-                            <span class="badge text-bg-success">Sí</span>
+                            {% if remito.tiene_observacion %}
+                                <span class="badge text-bg-warning text-dark"
+                                      data-bs-toggle="popover"
+                                      data-bs-trigger="click"
+                                      data-bs-placement="left"
+                                      data-bs-title="{% if remito.estado_observacion == 'rechazada' %}Rechazada{% else %}Observada{% endif %}"
+                                      data-bs-content="{{ remito.comentario_observacion|default:'Sin comentario.' }}"
+                                      style="cursor:pointer;">
+                                    ⚠️
+                                </span>
+                            {% else %}
+                                <span class="badge text-bg-success">Sí</span>
+                            {% endif %}
                             <div class="text-secondary small">{{ remito.evidencias_total }} evidencia{{ remito.evidencias_total|pluralize }}</div>
                         {% else %}
                             <span class="badge text-bg-warning text-dark">No</span>
@@ -134,4 +146,23 @@
     </div>
     {% endif %}
 </section>
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // Inicializar popovers y cerrar al hacer click fuera
+    var popoverEls = document.querySelectorAll("[data-bs-toggle='popover']");
+    var popovers = Array.from(popoverEls).map(function (el) {
+        return new bootstrap.Popover(el);
+    });
+    document.addEventListener("click", function (e) {
+        popovers.forEach(function (pop) {
+            if (!pop._element.contains(e.target)) {
+                pop.hide();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
 {% endblock %}
