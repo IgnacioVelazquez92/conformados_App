@@ -25,6 +25,7 @@ urlpatterns = [
     path("panel/evidencias/<int:evidencia_id>/validar/", views.validar_evidencia, name="panel-validar-evidencia"),
     path("panel/evidencias/<int:evidencia_id>/descargar/", views.descargar_evidencia, name="panel-descargar-evidencia"),
     path("panel/auditoria/hr-no-cargadas/", views.panel_auditoria_hr_no_cargadas, name="panel-auditoria-hr-no-cargadas"),
+    path("panel/auditoria/hr-no-cargadas/<str:oid>/", views.panel_auditoria_hr_detalle, name="panel-auditoria-hr-detalle"),
     path("panel/auditoria/remitos/", views.panel_auditoria_remitos, name="panel-auditoria-remitos"),
     path("panel/auditoria/remitos/<int:remito_id>/", views.panel_auditoria_remito_detalle, name="panel-auditoria-remito-detalle"),
     path("panel/empresas/<slug:empresa_slug>/hojas/<uuid:oid>/cerrar/", views.cerrar_hoja, name="panel-cerrar-hoja-empresa"),

@@ -17,7 +17,7 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.core.files.base import File
 from django.core.files.storage import default_storage
-from django.db.models import Count, Exists, Max, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, Max, Min, OuterRef, Q, Subquery
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -762,7 +762,7 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
     intentos_qs = IntentoAccesoPortal.objects.filter(
         fecha_evento__range=(desde_dt, hasta_dt),
         motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
-    ).order_by("-fecha_evento")
+    )
     intentos_qs = _scope_by_empresa(request, intentos_qs)
     if q:
         intentos_qs = intentos_qs.filter(oid__icontains=q)
@@ -776,12 +776,40 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
         .distinct()
         .order_by("canal")
     )
-    intentos = intentos_qs[:200]
+
+    hojas_qs = (
+        intentos_qs.values("oid")
+        .annotate(
+            total_intentos=Count("id"),
+            primer_intento=Min("fecha_evento"),
+            ultimo_intento=Max("fecha_evento"),
+        )
+        .order_by("-ultimo_intento")
+    )
+
+    paginator = Paginator(hojas_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    # Verificar cuáles OIDs ya existen como HojaRuta (subsanadas)
+    oid_values = [item["oid"] for item in page_obj]
+    hojas_existentes = set()
+    if oid_values:
+        try:
+            hojas_existentes = {
+                str(h).upper()
+                for h in HojaRuta.objects.filter(oid__in=oid_values).values_list("oid", flat=True)
+            }
+        except Exception:
+            pass
+    for item in page_obj:
+        item["existe_ahora"] = item["oid"].upper() in hojas_existentes
+
     return render(
         request,
         "tracking/panel_auditoria_hr_no_cargadas.html",
         {
-            "intentos": intentos,
+            "page_obj": page_obj,
             "q": q,
             "canal": canal,
             "canales": canales,
@@ -789,6 +817,45 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
             "hasta": hasta.isoformat(),
             "total_intentos": intentos_qs.count(),
             "total_hr_unicas": intentos_qs.values("oid").distinct().count(),
+        },
+    )
+
+
+@login_required
+def panel_auditoria_hr_detalle(request: HttpRequest, oid: str) -> HttpResponse:
+    if not can_review_evidence(request.user):
+        messages.error(request, "No tenes permisos para revisar auditoria de HR no cargadas.")
+        return redirect("panel-home")
+
+    intentos = (
+        _scope_by_empresa(
+            request,
+            IntentoAccesoPortal.objects.filter(
+                motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
+                oid=oid,
+            ),
+        )
+        .order_by("-fecha_evento")
+    )
+
+    hoja = None
+    try:
+        hoja = HojaRuta.objects.filter(oid=oid).first()
+        if hoja:
+            from .services.authz import user_can_access_empresa
+            if not request.user.is_superuser and not user_can_access_empresa(request.user, hoja.empresa):
+                hoja = None
+    except Exception:
+        pass
+
+    return render(
+        request,
+        "tracking/panel_auditoria_hr_detalle.html",
+        {
+            "oid": oid,
+            "intentos": intentos,
+            "hoja": hoja,
+            "total": intentos.count(),
         },
     )
 
