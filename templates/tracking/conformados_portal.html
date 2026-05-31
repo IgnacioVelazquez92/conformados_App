@@ -16,7 +16,7 @@
         <div class="col-12 col-md-8">
             <label for="remitoFilter" class="form-label">Codigo del remito</label>
             <input id="remitoFilter" name="remito" class="form-control" type="text" value="{{ remito_query }}" placeholder="Ej: 0000900022221" inputmode="numeric" pattern="\d{5}-?\d{8}" title="Ingresa los 13 digitos, el guion se agrega solo." aria-describedby="remitoHelp" required>
-            <div id="remitoHelp" class="form-text">Ingresá los números sin guión, se agrega automáticamente. El QR se valida por OID interno del remito.</div>
+            <div id="remitoHelp" class="form-text">Ingresá el número de remito para busqueda manual. El escáner se valida por QR del remito.</div>
             <div id="remitoFormatMsg" class="invalid-feedback">Formato esperado: 00009-00022221.</div>
             <input type="hidden" name="modo" value="{{ modo|default:'evidencia' }}">
             <input type="hidden" name="origen" id="remitoSearchOrigin" value="{{ remito_origen|default:'manual' }}">
@@ -72,6 +72,22 @@
                         <div class="col-12"><strong>Direccion:</strong> <span id="remitoDireccion"></span></div>
                     </div>
                 </div>
+
+                {% if evidencia_observada %}
+                <div class="alert alert-warning mb-3">
+                    <strong>
+                        {% if evidencia_observada.estado_validacion == "rechazada" %}
+                            ⚠️ Tu evidencia fue rechazada.
+                        {% else %}
+                            ⚠️ Tu evidencia fue observada.
+                        {% endif %}
+                    </strong>
+                    {% if evidencia_observada.comentario %}
+                    <p class="mb-1 mt-1 small">{{ evidencia_observada.comentario }}</p>
+                    {% endif %}
+                    <p class="mb-0 small">Por favor cargá una nueva foto correcta para este remito.</p>
+                </div>
+                {% endif %}
 
                 <!-- Tabs para elegir acción -->
                 <ul class="nav nav-tabs mb-3" role="tablist" id="conformadoTabs">

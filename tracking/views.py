@@ -17,7 +17,7 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.core.files.base import File
 from django.core.files.storage import default_storage
-from django.db.models import Count, Exists, Max, OuterRef, Q, Subquery
+from django.db.models import Count, Max, Q
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -83,6 +83,14 @@ def _check_rate_limit(*, key: str, limit: int, window_seconds: int) -> None:
 def _rate_limit_key(*, action: str, request: HttpRequest, canal: str, oid: str, remito_uid: str) -> str:
     ip = _normalize_code(_get_client_ip(request))
     return f"rate:{action}:{ip}:{canal}:{oid}:{_normalize_code(remito_uid)}"
+
+
+def _evidencia_observada_para_remito(remito) -> "Evidencia | None":
+    if not remito:
+        return None
+    return remito.evidencias.filter(
+        estado_validacion__in=[Evidencia.EstadoValidacion.RECHAZADA, Evidencia.EstadoValidacion.OBSERVADA]
+    ).order_by("-fecha_carga").first()
 
 
 def _evidencia_limits_context() -> dict[str, int]:
@@ -877,12 +885,6 @@ def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
     conformado = request.GET.get("conformado", "").strip()
     hoja = request.GET.get("hoja", "").strip()
 
-    _ESTADOS_OBSERVADOS = [Evidencia.EstadoValidacion.RECHAZADA, Evidencia.EstadoValidacion.OBSERVADA]
-    evidencia_observada_qs = Evidencia.objects.filter(
-        remito=OuterRef("pk"),
-        estado_validacion__in=_ESTADOS_OBSERVADOS,
-    ).order_by("-fecha_carga")
-
     remitos_qs = (
         _scope_by_empresa(request, Remito.objects.select_related("empresa", "hoja_ruta"))
         .annotate(
@@ -890,9 +892,6 @@ def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
             intentos_total=Count("intentos", distinct=True),
             fecha_ultima_evidencia=Max("evidencias__fecha_carga"),
             fecha_ultimo_evento=Max("eventos__fecha_evento"),
-            tiene_observacion=Exists(evidencia_observada_qs),
-            comentario_observacion=Subquery(evidencia_observada_qs.values("comentario")[:1]),
-            estado_observacion=Subquery(evidencia_observada_qs.values("estado_validacion")[:1]),
         )
         .order_by("-hoja_ruta__fecha", "-created_at", "numero")
     )
@@ -1489,6 +1488,7 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
             "remito_origen": remito_origen,
             "remito_seleccionado": remito_seleccionado,
             "remito_tiene_evidencia": bool(remito_seleccionado and remito_seleccionado.evidencias.exists()),
+            "evidencia_observada": _evidencia_observada_para_remito(remito_seleccionado),
             "remito_error": remito_error,
             "modo": modo,
             "evidencia_limits": _evidencia_limits_context(),
@@ -1563,6 +1563,7 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "remito_origen": "manual",
             "remito_seleccionado": remito,
             "remito_tiene_evidencia": remito.evidencias.exists(),
+            "evidencia_observada": _evidencia_observada_para_remito(remito),
             "remito_error": "",
             "modo": "evidencia",
             "evidencia_limits": _evidencia_limits_context(),
@@ -1636,6 +1637,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
             "remito_origen": "manual",
             "remito_seleccionado": remito,
             "remito_tiene_evidencia": remito.evidencias.exists(),
+            "evidencia_observada": _evidencia_observada_para_remito(remito),
             "remito_error": "",
             "modo": "no_entregado",
             "evidencia_limits": _evidencia_limits_context(),
