@@ -15,8 +15,8 @@
     <form method="get" class="row g-3" id="scannerFilterForm">
         <div class="col-12 col-md-8">
             <label for="remitoFilter" class="form-label">Codigo del remito</label>
-            <input id="remitoFilter" name="remito" class="form-control" type="text" value="{{ remito_query }}" placeholder="Ej: 00009-00022221" inputmode="numeric" pattern="\d{5}-?\d{8}" title="Usa 5 digitos, guion y 8 digitos. Ejemplo: 00009-00022221." aria-describedby="remitoHelp" required>
-            <div id="remitoHelp" class="form-text">Busqueda manual por numero de remito. El QR se valida por OID interno del remito.</div>
+            <input id="remitoFilter" name="remito" class="form-control" type="text" value="{{ remito_query }}" placeholder="Ej: 0000900022221" inputmode="numeric" pattern="\d{5}-?\d{8}" title="Ingresa los 13 digitos, el guion se agrega solo." aria-describedby="remitoHelp" required>
+            <div id="remitoHelp" class="form-text">Ingresá los números sin guión, se agrega automáticamente. El QR se valida por OID interno del remito.</div>
             <div id="remitoFormatMsg" class="invalid-feedback">Formato esperado: 00009-00022221.</div>
             <input type="hidden" name="modo" value="{{ modo|default:'evidencia' }}">
             <input type="hidden" name="origen" id="remitoSearchOrigin" value="{{ remito_origen|default:'manual' }}">
@@ -583,7 +583,15 @@
 
     startBtn.addEventListener("click", startScanner);
     stopBtn.addEventListener("click", stopScanner);
-    input.addEventListener("input", validateManualRemito);
+    input.addEventListener("input", function () {
+        // Auto-formato: insertar guión después de los primeros 5 dígitos
+        const digits = this.value.replace(/\D/g, "").slice(0, 13);
+        const formatted = digits.length > 5 ? digits.slice(0, 5) + "-" + digits.slice(5) : digits;
+        if (this.value !== formatted) {
+            this.value = formatted;
+        }
+        validateManualRemito();
+    });
     form.addEventListener("submit", function (event) {
         if ((!originInput || originInput.value === "manual") && !validateManualRemito()) {
             event.preventDefault();
