@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(git checkout -b feature/paginado-y-descarga)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(python manage.py makemigrations tracking --name anular_hoja_ruta)",
+      "Bash(python manage.py migrate)",
+      "Bash(python manage.py makemigrations tracking --name intento_entrega_archivo)"
+    ]
+  }
+}
