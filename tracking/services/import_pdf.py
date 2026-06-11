@@ -334,7 +334,7 @@ def _extract_remitos(text: str) -> list[RemitoData]:
         body: list[str] = []
         for line in lines[table_start:]:
             if line.lower().startswith("observaciones internas"):
-                break
+                continue
             body.append(_normalize_value(line))
 
         for idx, line in enumerate(body):
@@ -500,6 +500,13 @@ def parse_hoja_ruta_pdf_pages(page_texts: list[str], oid: uuid.UUID | None = Non
 
 
 def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any, empresa: Empresa) -> HojaRuta:
+    existing = HojaRuta.objects.filter(empresa=empresa, oid=parsed["oid"]).first()
+    if existing and existing.estado == HojaRuta.Estado.ANULADA:
+        raise ValueError(
+            f"La hoja {existing.nro_entrega} (OID {existing.oid}) fue anulada y no puede reimportarse. "
+            "Para reactivarla, contactá al administrador."
+        )
+
     hoja, _ = HojaRuta.objects.update_or_create(
         empresa=empresa,
         oid=parsed["oid"],
@@ -553,6 +560,61 @@ def _import_parsed_hoja(parsed: dict[str, Any], pdf_file: Any, empresa: Empresa)
         detalle=f"Hoja importada desde archivo con {len(parsed['remitos'])} remitos.",
     )
     return hoja
+
+
+@transaction.atomic
+def reprocess_remitos_from_pdf(hoja: HojaRuta) -> dict[str, int]:
+    """Re-parsea el PDF almacenado y agrega remitos faltantes sin tocar los existentes."""
+    if not hoja.archivo_pdf_original:
+        raise ValueError("La hoja no tiene PDF almacenado.")
+
+    pdf_file = hoja.archivo_pdf_original
+    page_texts = extract_page_texts_from_pdf(pdf_file)
+    parsed = parse_hoja_ruta_pdf_pages(page_texts, oid=hoja.oid)
+
+    existing_uids = set(hoja.remitos.values_list("remito_uid", flat=True))
+    existing_numeros = set(hoja.remitos.values_list("numero", flat=True))
+
+    agregados = 0
+    omitidos = 0
+
+    for remito_data in parsed["remitos"]:
+        if remito_data.remito_uid in existing_uids or remito_data.numero in existing_numeros:
+            omitidos += 1
+            continue
+
+        remito = Remito.objects.create(
+            hoja_ruta=hoja,
+            empresa=hoja.empresa,
+            remito_uid=remito_data.remito_uid,
+            numero=remito_data.numero,
+            cliente=remito_data.cliente,
+            subcliente=remito_data.subcliente,
+            direccion=remito_data.direccion,
+            observacion=remito_data.observacion,
+            fecha=_parse_date(remito_data.fecha) if remito_data.fecha else None,
+        )
+        existing_uids.add(remito_data.remito_uid)
+        existing_numeros.add(remito_data.numero)
+
+        EventoTrazabilidad.objects.create(
+            hoja_ruta=hoja,
+            empresa=hoja.empresa,
+            remito=remito,
+            tipo=EventoTrazabilidad.Tipo.IMPORTACION,
+            detalle="Remito agregado en reproceso de PDF.",
+        )
+        agregados += 1
+
+    if agregados > 0:
+        EventoTrazabilidad.objects.create(
+            hoja_ruta=hoja,
+            empresa=hoja.empresa,
+            tipo=EventoTrazabilidad.Tipo.IMPORTACION,
+            detalle=f"Reproceso de PDF: {agregados} remitos agregados, {omitidos} ya existian.",
+        )
+
+    return {"agregados": agregados, "omitidos": omitidos}
 
 
 @transaction.atomic

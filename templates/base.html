@@ -38,8 +38,16 @@
                         <a class="nav-link" href="/dashboard/">Dashboard</a>
                         <a class="nav-link" href="/panel/">Panel</a>
                         <a class="nav-link" href="/panel/evidencias/">Evidencias</a>
-                        <span class="navbar-text text-white-50">{{ request.user.username }}</span>
-                        <a class="nav-link" href="/accounts/logout/">Salir</a>
+                        <div class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle text-white-50 px-0" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                {{ request.user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="/accounts/cambiar-clave/">Cambiar contraseña</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/accounts/logout/">Salir</a></li>
+                            </ul>
+                        </div>
                     {% else %}
                         <a class="nav-link" href="/accounts/login/">Ingresar</a>
                     {% endif %}

@@ -20,6 +20,13 @@ def conformado_upload_to(instance: "Evidencia", filename: str) -> str:
     return f"conformados/{empresa}/{instance.hoja_ruta.oid}/{instance.remito.remito_uid}/{timestamp}{extension}"
 
 
+def intento_upload_to(instance: "IntentoEntrega", filename: str) -> str:
+    extension = Path(filename).suffix.lower() or ".jpg"
+    timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+    empresa = instance.empresa.slug if instance.empresa_id else instance.hoja_ruta.empresa.slug
+    return f"intentos/{empresa}/{instance.hoja_ruta.oid}/{instance.remito.remito_uid}/{timestamp}{extension}"
+
+
 class Empresa(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=120)
@@ -44,6 +51,7 @@ class HojaRuta(models.Model):
         IMPORTADA = "importada", "Importada"
         ABIERTA = "abierta", "Abierta"
         CERRADA = "cerrada", "Cerrada"
+        ANULADA = "anulada", "Anulada"
 
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="hojas_ruta")
     oid = models.UUIDField()
@@ -55,6 +63,7 @@ class HojaRuta(models.Model):
     acompanante = models.CharField(max_length=120, blank=True)
     transporte = models.CharField(max_length=120, blank=True)
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.IMPORTADA)
+    motivo_anulacion = models.TextField(blank=True)
     archivo_pdf_original = models.FileField(upload_to=hoja_ruta_pdf_upload_to, blank=True, max_length=200)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -75,6 +84,7 @@ class RoleDefinition(models.Model):
     can_review_evidence = models.BooleanField(default=False)
     can_audit_remitos = models.BooleanField(default=False)
     can_close_hoja = models.BooleanField(default=False)
+    can_anular_hoja = models.BooleanField(default=False)
     can_manage_users = models.BooleanField(default=False)
     share_logistica_default = models.BooleanField(default=False)
     share_cliente_default = models.BooleanField(default=False)
@@ -94,6 +104,7 @@ class RoleDefinition(models.Model):
             "can_review_evidence": self.can_review_evidence,
             "can_audit_remitos": self.can_audit_remitos,
             "can_close_hoja": self.can_close_hoja,
+            "can_anular_hoja": self.can_anular_hoja,
             "can_manage_users": self.can_manage_users,
             "share_logistica_default": self.share_logistica_default,
             "share_cliente_default": self.share_cliente_default,
@@ -117,6 +128,7 @@ class RoleDefinition(models.Model):
             "can_review_evidence": False,
             "can_audit_remitos": False,
             "can_close_hoja": False,
+            "can_anular_hoja": False,
             "can_manage_users": False,
             "share_logistica_default": False,
             "share_cliente_default": False,
@@ -191,6 +203,7 @@ class IntentoEntrega(models.Model):
     canal = models.CharField(max_length=20, choices=Canal.choices)
     motivo = models.CharField(max_length=120)
     comentario = models.TextField(blank=True)
+    archivo = models.FileField(upload_to=intento_upload_to, blank=True, max_length=200)
     fecha_evento = models.DateTimeField(auto_now_add=True)
 
 
@@ -232,6 +245,7 @@ class EventoTrazabilidad(models.Model):
         VALIDACION = "validacion", "Validacion"
         RECHAZO = "rechazo", "Rechazo"
         CIERRE = "cierre", "Cierre"
+        ANULACION = "anulacion", "Anulacion"
 
     hoja_ruta = models.ForeignKey(HojaRuta, on_delete=models.CASCADE, related_name="eventos")
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="eventos")
@@ -278,3 +292,8 @@ def delete_evidencia_file(sender, instance: Evidencia, **kwargs) -> None:
 @receiver(post_delete, sender=HojaRuta)
 def delete_hoja_ruta_pdf(sender, instance: HojaRuta, **kwargs) -> None:
     _delete_file_field(instance.archivo_pdf_original)
+
+
+@receiver(post_delete, sender=IntentoEntrega)
+def delete_intento_file(sender, instance: IntentoEntrega, **kwargs) -> None:
+    _delete_file_field(instance.archivo)

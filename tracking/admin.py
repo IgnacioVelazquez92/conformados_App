@@ -3,8 +3,12 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import path, reverse
+from django.utils.html import format_html
 
 from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, IntentoEntrega, PublicAlertRecipient, Remito, RoleDefinition, UserProfile
+from .services.import_pdf import reprocess_remitos_from_pdf
 
 
 @admin.register(Empresa)
@@ -35,7 +39,7 @@ class EvidenciaInline(admin.TabularInline):
 class IntentoEntregaInline(admin.TabularInline):
     model = IntentoEntrega
     extra = 0
-    fields = ("remito", "canal", "motivo", "comentario", "fecha_evento")
+    fields = ("remito", "canal", "motivo", "comentario", "archivo", "fecha_evento")
     readonly_fields = ("fecha_evento",)
     show_change_link = True
 
@@ -179,11 +183,11 @@ class HojaRutaAdmin(admin.ModelAdmin):
     )
     list_filter = ("empresa", "estado", "fecha", "transporte_tipo", "created_at")
     search_fields = ("oid", "nro_entrega", "chofer", "transporte", "empresa__name", "empresa__code")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at", "boton_reprocesar")
     fieldsets = (
         (
             "Identificacion",
-            {"fields": ("empresa", "oid", "nro_entrega", "fecha", "estado", "archivo_pdf_original")},
+            {"fields": ("empresa", "oid", "nro_entrega", "fecha", "estado", "motivo_anulacion", "archivo_pdf_original", "boton_reprocesar")},
         ),
         (
             "Transporte",
@@ -195,6 +199,52 @@ class HojaRutaAdmin(admin.ModelAdmin):
         ),
     )
     inlines = (RemitoInline, EvidenciaInline, IntentoEntregaInline, EventoTrazabilidadInline)
+
+    @admin.display(description="Reprocesar remitos")
+    def boton_reprocesar(self, obj: HojaRuta) -> str:
+        if not obj.pk:
+            return "-"
+        if not obj.archivo_pdf_original:
+            return "Sin PDF almacenado"
+        url = reverse("admin:hojaruta_reprocesar", args=[obj.pk])
+        return format_html(
+            '<a class="button" href="{}" style="padding:6px 12px;background:#417690;color:#fff;border-radius:4px;text-decoration:none;font-size:13px;">'
+            "Reprocesar remitos desde PDF</a>"
+            "<br><small style='color:#666;margin-top:4px;display:block;'>"
+            "Agrega remitos faltantes sin modificar los existentes ni sus conformados.</small>",
+            url,
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:pk>/reprocesar/",
+                self.admin_site.admin_view(self.reprocesar_view),
+                name="hojaruta_reprocesar",
+            ),
+        ]
+        return custom_urls + urls
+
+    def reprocesar_view(self, request, pk: int):
+        hoja = get_object_or_404(HojaRuta, pk=pk)
+        try:
+            resultado = reprocess_remitos_from_pdf(hoja)
+            if resultado["agregados"] > 0:
+                self.message_user(
+                    request,
+                    f"Reproceso completado: {resultado['agregados']} remito(s) agregado(s), "
+                    f"{resultado['omitidos']} ya existian.",
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"No hay remitos nuevos para agregar. {resultado['omitidos']} remito(s) ya estaban importados.",
+                    level="warning",
+                )
+        except Exception as exc:
+            self.message_user(request, f"Error en el reproceso: {exc}", level="error")
+        return redirect(reverse("admin:tracking_hojaruta_change", args=[pk]))
 
 
 @admin.register(Remito)
@@ -215,6 +265,7 @@ class RoleDefinitionAdmin(admin.ModelAdmin):
         "can_review_evidence",
         "can_audit_remitos",
         "can_close_hoja",
+        "can_anular_hoja",
         "can_manage_users",
         "share_logistica_default",
         "share_cliente_default",
@@ -225,6 +276,7 @@ class RoleDefinitionAdmin(admin.ModelAdmin):
         "can_review_evidence",
         "can_audit_remitos",
         "can_close_hoja",
+        "can_anular_hoja",
         "can_manage_users",
         "share_logistica_default",
         "share_cliente_default",

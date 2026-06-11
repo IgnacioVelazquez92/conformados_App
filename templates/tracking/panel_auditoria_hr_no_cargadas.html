@@ -8,7 +8,7 @@
         <div>
             <div class="text-uppercase text-secondary fw-semibold small mb-2">Auditoria de accesos publicos</div>
             <h1 class="h4 mb-1">HR no cargadas</h1>
-            <p class="text-secondary mb-0">Intentos de ingreso a hojas de ruta que todavia no existen en el sistema.</p>
+            <p class="text-secondary mb-0">Hojas de ruta a las que se intentó acceder pero no existían en el sistema.</p>
         </div>
         <a class="btn btn-outline-secondary align-self-start" href="/panel/">Volver</a>
     </div>
@@ -45,11 +45,11 @@
 
     <div class="row g-0 border-bottom">
         <div class="col-6 col-lg-3 p-3 border-end">
-            <div class="text-secondary small">Intentos</div>
+            <div class="text-secondary small">Intentos totales</div>
             <div class="h3 mb-0">{{ total_intentos }}</div>
         </div>
         <div class="col-6 col-lg-3 p-3">
-            <div class="text-secondary small">HR unicas</div>
+            <div class="text-secondary small">HR únicas</div>
             <div class="h3 mb-0">{{ total_hr_unicas }}</div>
         </div>
     </div>
@@ -58,29 +58,66 @@
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Fecha</th>
-                    <th>Canal</th>
-                    <th>HR / OID solicitado</th>
-                    <th class="d-none d-lg-table-cell">IP</th>
-                    <th class="d-none d-xl-table-cell">Ruta</th>
+                    <th>Estado</th>
+                    <th>OID solicitado</th>
+                    <th>Intentos</th>
+                    <th>Primer intento</th>
+                    <th>Último intento</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-                {% for intento in intentos %}
+                {% for hoja in page_obj %}
                 <tr>
-                    <td>{{ intento.fecha_evento|date:"d/m/Y H:i" }}</td>
-                    <td><span class="badge text-bg-light border">{{ intento.canal }}</span></td>
-                    <td><code>{{ intento.oid }}</code></td>
-                    <td class="d-none d-lg-table-cell">{{ intento.ip_address }}</td>
-                    <td class="d-none d-xl-table-cell"><small class="text-secondary">{{ intento.path }}</small></td>
+                    <td>
+                        {% if hoja.existe_ahora %}
+                            <span class="badge text-bg-success">Cargada</span>
+                        {% else %}
+                            <span class="badge text-bg-danger">Pendiente</span>
+                        {% endif %}
+                    </td>
+                    <td><code class="small">{{ hoja.oid }}</code></td>
+                    <td>{{ hoja.total_intentos }}</td>
+                    <td class="text-secondary small">{{ hoja.primer_intento|date:"d/m/Y H:i" }}</td>
+                    <td class="text-secondary small">{{ hoja.ultimo_intento|date:"d/m/Y H:i" }}</td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-secondary" href="/panel/auditoria/hr-no-cargadas/{{ hoja.oid }}/?desde={{ desde }}&hasta={{ hasta }}">Ver intentos</a>
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="text-center text-secondary py-4">No hay intentos registrados para los filtros seleccionados.</td>
+                    <td colspan="6" class="text-center text-secondary py-4">No hay intentos registrados para los filtros seleccionados.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="d-flex justify-content-between align-items-center px-4 py-3 border-top flex-wrap gap-2">
+        <small class="text-secondary">
+            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} hojas
+        </small>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page=1&q={{ q }}&canal={{ canal }}&desde={{ desde }}&hasta={{ hasta }}">&laquo;</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ q }}&canal={{ canal }}&desde={{ desde }}&hasta={{ hasta }}">&lsaquo;</a></li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                <li class="page-item disabled"><span class="page-link">&lsaquo;</span></li>
+                {% endif %}
+                <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+                {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ q }}&canal={{ canal }}&desde={{ desde }}&hasta={{ hasta }}">&rsaquo;</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&q={{ q }}&canal={{ canal }}&desde={{ desde }}&hasta={{ hasta }}">&raquo;</a></li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&rsaquo;</span></li>
+                <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </section>
 {% endblock %}

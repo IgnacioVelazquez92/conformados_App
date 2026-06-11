@@ -94,5 +94,45 @@
             </tbody>
         </table>
     </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="d-flex justify-content-between align-items-center px-4 py-3 border-top flex-wrap gap-2">
+        <small class="text-secondary">
+            Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} remitos
+        </small>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1&q={{ q }}&estado={{ estado }}&conformado={{ conformado }}&hoja={{ hoja }}">&laquo;</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ q }}&estado={{ estado }}&conformado={{ conformado }}&hoja={{ hoja }}">&lsaquo;</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                <li class="page-item disabled"><span class="page-link">&lsaquo;</span></li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ q }}&estado={{ estado }}&conformado={{ conformado }}&hoja={{ hoja }}">&rsaquo;</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&q={{ q }}&estado={{ estado }}&conformado={{ conformado }}&hoja={{ hoja }}">&raquo;</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&rsaquo;</span></li>
+                <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
 </section>
+
 {% endblock %}

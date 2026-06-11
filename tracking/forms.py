@@ -118,6 +118,25 @@ NO_ENTREGADO_CHOICES = [
 class NoEntregadoForm(forms.Form):
     motivo = forms.ChoiceField(choices=NO_ENTREGADO_CHOICES)
     comentario = forms.CharField(label="Comentario", required=False, widget=forms.Textarea)
+    archivo = forms.FileField(
+        label="Constancia de visita (foto opcional)",
+        required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": "image/*"}),
+    )
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get("archivo")
+        if not archivo:
+            return archivo
+        name = (archivo.name or "").lower()
+        content_type = getattr(archivo, "content_type", "") or ""
+        is_image = any(name.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")) or content_type.startswith("image/")
+        if not is_image:
+            raise forms.ValidationError("La constancia de visita debe ser una imagen.")
+        max_bytes = settings.EVIDENCIA_MAX_IMAGE_SIZE_MB * 1024 * 1024
+        if getattr(archivo, "size", 0) > max_bytes:
+            raise forms.ValidationError(f"La imagen no puede pesar más de {settings.EVIDENCIA_MAX_IMAGE_SIZE_MB} MB.")
+        return archivo
 
 
 class ValidacionEvidenciaForm(forms.Form):
@@ -141,6 +160,14 @@ class ValidacionEvidenciaForm(forms.Form):
 
 class CierreHojaForm(forms.Form):
     comentario = forms.CharField(label="Comentario", required=False, widget=forms.Textarea)
+
+
+class AnularHojaForm(forms.Form):
+    motivo = forms.CharField(
+        label="Motivo de anulación",
+        required=True,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "Describí el motivo por el que se anula esta hoja de ruta."}),
+    )
 
 
 class LoginForm(AuthenticationForm):

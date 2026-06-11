@@ -111,6 +111,15 @@ def can_close_hoja(user: User) -> bool:
     return can_review_evidence(user)
 
 
+def can_anular_hoja(user: User) -> bool:
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    profile = get_or_create_profile(user)
+    return RoleDefinition.permission_map(profile.rol)["can_anular_hoja"]
+
+
 def can_grant_staff(user: User) -> bool:
     if not user.is_authenticated:
         return False

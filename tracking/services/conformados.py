@@ -38,7 +38,7 @@ def registrar_evidencia(*, hoja: HojaRuta, remito: Remito, canal: str, archivo, 
 
 
 @transaction.atomic
-def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str, motivo: str, comentario: str = "") -> IntentoEntrega:
+def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str, motivo: str, comentario: str = "", archivo=None) -> IntentoEntrega:
     if hoja.estado != HojaRuta.Estado.ABIERTA:
         raise ValueError("La hoja no esta abierta.")
 
@@ -50,6 +50,10 @@ def registrar_intento_no_entregado(*, hoja: HojaRuta, remito: Remito, canal: str
         motivo=motivo,
         comentario=comentario,
     )
+
+    if archivo:
+        intento.archivo = archivo
+        intento.save(update_fields=["archivo"])
 
     remito.estado = Remito.Estado.INTENTO_FALLIDO
     remito.save(update_fields=["estado"])

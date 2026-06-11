@@ -8,9 +8,17 @@
         <div>
             <h1 class="h4 mb-1">Hoja {{ hoja.nro_entrega }}</h1>
             <p class="mb-1"><strong>OID:</strong> {{ hoja.oid }}</p>
-            <p class="mb-0"><span class="badge brand-chip">{{ hoja.estado }}</span></p>
+            <p class="mb-0"><span class="badge brand-chip">{{ hoja.get_estado_display }}</span></p>
+            {% if hoja.estado == "anulada" and hoja.motivo_anulacion %}
+                <p class="text-secondary small mt-1 mb-0"><strong>Motivo de anulación:</strong> {{ hoja.motivo_anulacion }}</p>
+            {% endif %}
         </div>
-        <a class="btn btn-outline-secondary" href="/panel/">Volver al panel</a>
+        <div class="d-flex flex-wrap gap-2">
+            {% if can_anular_hoja and hoja.estado == "abierta" %}
+                <a class="btn btn-outline-danger btn-sm" href="/panel/hojas/{{ hoja.oid }}/anular/">Anular hoja</a>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="/panel/">Volver al panel</a>
+        </div>
     </div>
 </section>
 

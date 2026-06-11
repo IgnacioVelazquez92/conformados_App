@@ -7,7 +7,8 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from django.contrib import messages
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
@@ -16,16 +17,17 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.core.files.base import File
 from django.core.files.storage import default_storage
-from django.db.models import Count, Max, Q
-from django.http import HttpRequest, HttpResponse
+from django.db.models import Count, Exists, Max, Min, OuterRef, Q, Subquery
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.db.models.functions import TruncDate
 
-from .forms import CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, ImportUsersForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
+from .forms import AnularHojaForm, CierreHojaForm, EvidenciaForm, ImportPdfForm, ImportSpreadsheetForm, ImportUsersForm, LoginForm, NoEntregadoForm, UserCreateForm, UserDeleteForm, UserUpdateForm, ValidacionEvidenciaForm
 from .models import Empresa, Evidencia, EventoTrazabilidad, HojaRuta, IntentoAccesoPortal, Remito, RoleDefinition
 from .services.authz import (
+    can_anular_hoja,
     can_audit_remitos,
     can_close_hoja,
     can_grant_staff,
@@ -40,7 +42,7 @@ from .services.authz import (
     update_user_with_profile,
     user_can_access_empresa,
 )
-from .services.admin_ops import cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
+from .services.admin_ops import anular_hoja_ruta, cerrar_hoja_ruta, validar_evidencia as validar_evidencia_service
 from .services.conformados import registrar_evidencia, registrar_intento_acceso_portal, registrar_intento_no_entregado
 from .services.email_alerts import send_public_access_alert
 from .services.import_pdf import _validate_parsed_hoja, extract_oid_from_qr, extract_page_texts_from_pdf, import_hoja_ruta_pdf, parse_hoja_ruta_pdf_pages
@@ -353,6 +355,7 @@ def _timeline_badge_class(tipo: str) -> str:
         EventoTrazabilidad.Tipo.VALIDACION: "bg-primary",
         EventoTrazabilidad.Tipo.RECHAZO: "bg-danger",
         EventoTrazabilidad.Tipo.CIERRE: "bg-dark",
+        EventoTrazabilidad.Tipo.ANULACION: "bg-danger",
     }.get(tipo, "bg-secondary")
 
 
@@ -377,6 +380,20 @@ def login_view(request: HttpRequest) -> HttpResponse:
 def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     return redirect("login")
+
+
+@login_required
+def cambiar_clave(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Contraseña actualizada correctamente.")
+            return redirect("panel-home")
+    else:
+        form = PasswordChangeForm(request.user)
+    return render(request, "tracking/cambiar_clave.html", {"form": form})
 
 
 @login_required
@@ -434,6 +451,7 @@ def panel_permisos(request: HttpRequest) -> HttpResponse:
         ("Revisar y validar evidencias", "can_review_evidence"),
         ("Auditoria de remitos", "can_audit_remitos"),
         ("Cerrar hoja", "can_close_hoja"),
+        ("Anular hoja", "can_anular_hoja"),
         ("Gestionar usuarios", "can_manage_users"),
         ("Compartir link logistica", "share_logistica_default"),
         ("Compartir link cliente", "share_cliente_default"),
@@ -648,6 +666,7 @@ def panel_home(request: HttpRequest) -> HttpResponse:
             "can_audit_remitos": can_audit_remitos(request.user),
             "can_manage_users": can_manage_users(request.user),
             "can_close_hoja": can_close_hoja(request.user),
+            "can_anular_hoja": can_anular_hoja(request.user),
         },
     )
 
@@ -743,7 +762,7 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
     intentos_qs = IntentoAccesoPortal.objects.filter(
         fecha_evento__range=(desde_dt, hasta_dt),
         motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
-    ).order_by("-fecha_evento")
+    )
     intentos_qs = _scope_by_empresa(request, intentos_qs)
     if q:
         intentos_qs = intentos_qs.filter(oid__icontains=q)
@@ -757,12 +776,40 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
         .distinct()
         .order_by("canal")
     )
-    intentos = intentos_qs[:200]
+
+    hojas_qs = (
+        intentos_qs.values("oid")
+        .annotate(
+            total_intentos=Count("id"),
+            primer_intento=Min("fecha_evento"),
+            ultimo_intento=Max("fecha_evento"),
+        )
+        .order_by("-ultimo_intento")
+    )
+
+    paginator = Paginator(hojas_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    # Verificar cuáles OIDs ya existen como HojaRuta (subsanadas)
+    oid_values = [item["oid"] for item in page_obj]
+    hojas_existentes = set()
+    if oid_values:
+        try:
+            hojas_existentes = {
+                str(h).upper()
+                for h in HojaRuta.objects.filter(oid__in=oid_values).values_list("oid", flat=True)
+            }
+        except Exception:
+            pass
+    for item in page_obj:
+        item["existe_ahora"] = item["oid"].upper() in hojas_existentes
+
     return render(
         request,
         "tracking/panel_auditoria_hr_no_cargadas.html",
         {
-            "intentos": intentos,
+            "page_obj": page_obj,
             "q": q,
             "canal": canal,
             "canales": canales,
@@ -770,6 +817,45 @@ def panel_auditoria_hr_no_cargadas(request: HttpRequest) -> HttpResponse:
             "hasta": hasta.isoformat(),
             "total_intentos": intentos_qs.count(),
             "total_hr_unicas": intentos_qs.values("oid").distinct().count(),
+        },
+    )
+
+
+@login_required
+def panel_auditoria_hr_detalle(request: HttpRequest, oid: str) -> HttpResponse:
+    if not can_review_evidence(request.user):
+        messages.error(request, "No tenes permisos para revisar auditoria de HR no cargadas.")
+        return redirect("panel-home")
+
+    intentos = (
+        _scope_by_empresa(
+            request,
+            IntentoAccesoPortal.objects.filter(
+                motivo=IntentoAccesoPortal.Motivo.HOJA_INEXISTENTE,
+                oid=oid,
+            ),
+        )
+        .order_by("-fecha_evento")
+    )
+
+    hoja = None
+    try:
+        hoja = HojaRuta.objects.filter(oid=oid).first()
+        if hoja:
+            from .services.authz import user_can_access_empresa
+            if not request.user.is_superuser and not user_can_access_empresa(request.user, hoja.empresa):
+                hoja = None
+    except Exception:
+        pass
+
+    return render(
+        request,
+        "tracking/panel_auditoria_hr_detalle.html",
+        {
+            "oid": oid,
+            "intentos": intentos,
+            "hoja": hoja,
+            "total": intentos.count(),
         },
     )
 
@@ -808,6 +894,7 @@ def panel_hoja_detalle(request: HttpRequest, oid: str, empresa_slug: str = "") -
             "can_share_cliente": profile.can_share_cliente(),
             "logistica_url": logistica_url,
             "cliente_url": cliente_url,
+            "can_anular_hoja": can_anular_hoja(request.user),
         },
     )
 
@@ -830,12 +917,15 @@ def panel_evidencias(request: HttpRequest) -> HttpResponse:
     if estado:
         evidencias_qs = evidencias_qs.filter(estado_validacion=estado)
 
-    evidencias = evidencias_qs[:200]
+    paginator = Paginator(evidencias_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
     return render(
         request,
         "tracking/panel_evidencias.html",
         {
-            "evidencias": evidencias,
+            "evidencias": page_obj,
+            "page_obj": page_obj,
             "remito": remito_q,
             "estado": estado,
             "estados": Evidencia.EstadoValidacion.choices,
@@ -881,11 +971,15 @@ def panel_auditoria_remitos(request: HttpRequest) -> HttpResponse:
     elif conformado == "no":
         remitos_qs = remitos_qs.filter(evidencias_total=0)
 
+    paginator = Paginator(remitos_qs, 25)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
     return render(
         request,
         "tracking/panel_auditoria_remitos.html",
         {
-            "remitos": remitos_qs,
+            "remitos": page_obj,
+            "page_obj": page_obj,
             "q": q,
             "estado": estado,
             "conformado": conformado,
@@ -953,6 +1047,35 @@ def panel_auditoria_remito_detalle(request: HttpRequest, remito_id: int) -> Http
             "total_intentos": len(intentos),
         },
     )
+
+
+@login_required
+def descargar_evidencia(request: HttpRequest, evidencia_id: int) -> HttpResponse:
+    evidencia = get_object_or_404(
+        _scope_by_empresa(request, Evidencia.objects.select_related("remito")),
+        pk=evidencia_id,
+    )
+    archivo = evidencia.archivo
+    if not archivo or not archivo.name:
+        raise Http404
+
+    extension = Path(archivo.name).suffix.lower()
+    numero_limpio = evidencia.remito.numero.replace("/", "-").replace(" ", "_")
+    filename = f"conformado_{numero_limpio}{extension}"
+
+    content_type_map = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".webp": "image/webp",
+        ".gif": "image/gif", ".pdf": "application/pdf",
+    }
+    content_type = content_type_map.get(extension, "application/octet-stream")
+
+    try:
+        response = HttpResponse(archivo.open("rb"), content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except Exception:
+        raise Http404
 
 
 @login_required
@@ -1387,6 +1510,8 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
     request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid_text})
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid_text})
 
     remito_query = request.GET.get("remito", "").strip()
     remito_origen = request.GET.get("origen", "manual").strip()
@@ -1407,7 +1532,15 @@ def conformados_portal(request: HttpRequest, canal: str, oid: str) -> HttpRespon
         except ValueError as exc:
             remito_error = str(exc)
 
-    remitos = hoja.remitos.order_by("id")
+    _ev_obs_qs = Evidencia.objects.filter(
+        remito=OuterRef("pk"),
+        estado_validacion__in=[Evidencia.EstadoValidacion.RECHAZADA, Evidencia.EstadoValidacion.OBSERVADA],
+    ).order_by("-fecha_carga")
+    remitos = hoja.remitos.annotate(
+        tiene_observacion=Exists(_ev_obs_qs),
+        comentario_observacion=Subquery(_ev_obs_qs.values("comentario")[:1]),
+        estado_observacion=Subquery(_ev_obs_qs.values("estado_validacion")[:1]),
+    ).order_by("id")
     return render(
         request,
         "tracking/conformados_portal.html",
@@ -1443,6 +1576,8 @@ def subir_evidencia(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid})
 
     form = EvidenciaForm(request.POST, request.FILES)
     try:
@@ -1515,8 +1650,10 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
     request.active_empresa = hoja.empresa
     if hoja.estado == HojaRuta.Estado.CERRADA:
         return render(request, "tracking/estado_hoja.html", {"estado": "cerrada", "canal": canal, "oid": oid})
+    if hoja.estado == HojaRuta.Estado.ANULADA:
+        return render(request, "tracking/estado_hoja.html", {"estado": "anulada", "canal": canal, "oid": oid})
 
-    form = NoEntregadoForm(request.POST)
+    form = NoEntregadoForm(request.POST, request.FILES)
     try:
         remito = _find_remito_in_hoja(hoja=hoja, remito_input=request.POST.get("remito_uid", ""), origen="qr")
     except ValueError as exc:
@@ -1542,6 +1679,7 @@ def no_entregado(request: HttpRequest, canal: str, oid: str) -> HttpResponse:
                 canal=canal,
                 motivo=form.cleaned_data["motivo"],
                 comentario=form.cleaned_data.get("comentario", ""),
+                archivo=form.cleaned_data.get("archivo") or None,
             )
         except Exception as exc:
             form.add_error(None, str(exc))
@@ -1634,4 +1772,40 @@ def cerrar_hoja(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpR
         request,
         "tracking/cerrar_hoja.html",
         {"hoja": hoja, "form": form, "puede_cerrar": puede_cerrar, "remitos_pendientes": remitos_pendientes},
+    )
+
+
+@login_required
+def anular_hoja(request: HttpRequest, oid: str, empresa_slug: str = "") -> HttpResponse:
+    if not can_anular_hoja(request.user):
+        messages.error(request, "No tenés permisos para anular hojas.")
+        return redirect("panel-home")
+
+    hoja = _get_scoped_hoja_or_404(request, oid, empresa_slug)
+
+    puede_anular = (
+        hoja.estado not in (HojaRuta.Estado.CERRADA, HojaRuta.Estado.ANULADA)
+        and not hoja.evidencias.exists()
+    )
+
+    if request.method == "POST":
+        form = AnularHojaForm(request.POST)
+        if form.is_valid():
+            if not puede_anular:
+                messages.error(request, "Esta hoja no puede ser anulada.")
+                return redirect("panel-home")
+            try:
+                anular_hoja_ruta(hoja=hoja, motivo=form.cleaned_data["motivo"])
+            except ValueError as exc:
+                form.add_error(None, str(exc))
+            else:
+                messages.success(request, f"Hoja {hoja.nro_entrega} anulada correctamente.")
+                return redirect("panel-home")
+    else:
+        form = AnularHojaForm()
+
+    return render(
+        request,
+        "tracking/anular_hoja.html",
+        {"hoja": hoja, "form": form, "puede_anular": puede_anular},
     )
