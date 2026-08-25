@@ -94,6 +94,9 @@ def extract_page_texts_from_pdf(pdf_file: Any) -> list[str]:
     return parts
 
 
+_ARUCO_QR_DETECTOR = cv2.QRCodeDetectorAruco() if hasattr(cv2, "QRCodeDetectorAruco") else None
+
+
 def _decode_qr_from_page(page: fitz.Page) -> list[str]:
     detector = cv2.QRCodeDetector()
     decoded: list[str] = []
@@ -105,6 +108,13 @@ def _decode_qr_from_page(page: fitz.Page) -> list[str]:
         )
         if image is None:
             continue
+        if _ARUCO_QR_DETECTOR is not None:
+            try:
+                value, _, _ = _ARUCO_QR_DETECTOR.detectAndDecode(image)
+                if value:
+                    decoded.append(value)
+            except Exception:
+                pass
         try:
             success, decoded_info, _, _ = detector.detectAndDecodeMulti(image)
             if success:

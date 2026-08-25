@@ -250,7 +250,7 @@ Servicio de importacion y parseo de PDF de Hoja de Ruta.
 - `extract_text_from_pdf(...)`: obtiene texto plano del PDF.
 - `extract_page_texts_from_pdf(...)`: obtiene texto por pagina para separar cabecera y remitos en importaciones multipagina.
 - `extract_oid_from_qr(...)`: decodifica el QR o extrae el oid desde la URL embebida; rechaza PDFs con multiples OID de hoja y falla si no detecta ninguno.
-- `_decode_qr_from_page(...)`: intenta decodificar QR con varios niveles de resolucion y escala de grises para PDFs donde el QR sale chico.
+- `_decode_qr_from_page(...)`: intenta decodificar QR con `cv2.QRCodeDetectorAruco` (mas robusto, prioritario) y `cv2.QRCodeDetector` clasico como refuerzo, en varios niveles de resolucion y escala de grises, para PDFs donde el QR sale chico o el detector clasico no lo reconoce.
 - `_extract_labelled_value(...)`: extrae cabeceras por etiqueta (nro, flete, chofer, acompanante, transporte) con fallback de linea siguiente.
 - `_extract_labelled_value(...)`: evita tomar la linea siguiente como valor cuando una etiqueta viene vacia, como `Transporte Tipo:` antes de `Peso Total:`.
 - `_merge_wrapped_uuid_lines(...)`: reconstruye UUID de remitos cortados en dos lineas por el PDF.
